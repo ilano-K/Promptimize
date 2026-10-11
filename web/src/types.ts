@@ -1,4 +1,4 @@
-// Shared domain types. These mirror the logical schema in TECHNICAL.md so the
+// Shared domain types. These mirror the logical schema in docs/TECHNICAL.md so the
 // prototype can later be wired to the real server without reshaping data.
 
 export type Label = 'train' | 'validation' | 'test'
