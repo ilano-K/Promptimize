@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# local data and secrets (the app keeps these in ~/.promptimize, but just in case)
+*.sqlite
+*.sqlite-journal
+*.db
+config.json
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Claude Code, learning notes and design docs (local only)
+.claude/
+.vibe-wise/
+*.md
+!/README.md
+docs/

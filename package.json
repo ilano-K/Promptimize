@@ -1,0 +1,22 @@
+{
+  "name": "promptimize",
+  "version": "0.0.0",
+  "description": "Local app for optimizing prompts",
+  "type": "module",
+  "workspaces": [
+    "web",
+    "server",
+    "shared"
+  ],
+  "bin": {
+    "promptimize": "./bin/promptimize.js"
+  },
+  "scripts": {
+    "dev": "concurrently -n web,server -c cyan,magenta \"npm run dev -w web\" \"npm run dev -w server\"",
+    "build": "npm run build -w web && npm run build -w server",
+    "typecheck": "tsc -p server --noEmit"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
