@@ -1,0 +1,17 @@
+meta {
+  name: List projects
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/projects
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  forwardAuthorizationHeader: false
+}

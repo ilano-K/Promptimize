@@ -1,29 +1,31 @@
 import { FolderSimple, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
 import { useState } from 'react'
+import { ApiError } from '../api'
 import { Button, Empty, Field, inputCls, Modal, PageHeader, Tag, textareaCls, timeAgo } from '../components/ui'
 import { go } from '../router'
-import { uid, useStore } from '../store'
+import { useStore } from '../store'
 import type { Project } from '../types'
 
 export function Projects() {
   const s = useStore()
   const [editing, setEditing] = useState<Project | 'new' | null>(null)
 
-  const open = (id: string) => {
+  const open = (id: number) => {
     s.setProject(id)
     go('experiments')
   }
 
   const stats = (p: Project) => {
-    const exps = s.experiments.filter((e) => e.projectId === p.id)
+    const key = String(p.id)
+    const exps = s.experiments.filter((e) => e.projectId === key)
     const expIds = new Set(exps.map((e) => e.id))
     const lastRun = Math.max(0, ...s.runs.filter((r) => expIds.has(r.experimentId)).map((r) => r.startedAt))
     return {
       experiments: exps.length,
-      inputs: s.inputs.filter((x) => x.projectId === p.id).length,
-      prompts: s.prompts.filter((x) => x.projectId === p.id).length,
-      judges: s.judges.filter((x) => x.projectId === p.id).length,
-      lastActive: lastRun || p.createdAt,
+      inputs: s.inputs.filter((x) => x.projectId === key).length,
+      prompts: s.prompts.filter((x) => x.projectId === key).length,
+      judges: s.judges.filter((x) => x.projectId === key).length,
+      lastActive: lastRun || Date.parse(p.createdAt),
     }
   }
 
@@ -39,7 +41,18 @@ export function Projects() {
         }
       />
 
-      {s.projects.length === 0 ? (
+      {s.projectsStatus === 'error' ? (
+        <Empty
+          icon={<FolderSimple size={28} />}
+          title="Couldn't load projects"
+          body={s.projectsError ?? 'Something went wrong talking to the server.'}
+          action={<Button onClick={() => void s.loadProjects()}>Try again</Button>}
+        />
+      ) : s.projectsStatus === 'loading' && s.projects.length === 0 ? (
+        <p className="text-sm text-fg-3" role="status">
+          Loading projects…
+        </p>
+      ) : s.projects.length === 0 ? (
         <Empty
           icon={<FolderSimple size={28} />}
           title="No projects yet"
@@ -54,7 +67,7 @@ export function Projects() {
         <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {s.projects.map((p, i) => {
             const st = stats(p)
-            const current = p.id === s.projectId
+            const current = String(p.id) === s.projectId
             return (
               <li key={p.id} className="rise relative" style={{ animationDelay: `${i * 30}ms` }}>
                 <button
@@ -111,32 +124,55 @@ export function ProjectForm({ initial, onClose }: { initial?: Project; onClose: 
   const s = useStore()
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
+  const [busy, setBusy] = useState(false)
+  const [serverError, setServerError] = useState<{ code: string; message: string } | null>(null)
   const taken = s.projects.some((p) => p.id !== initial?.id && p.name.trim().toLowerCase() === name.trim().toLowerCase())
-  const ok = name.trim() && !taken
+  const ok = name.trim() && !taken && !busy
 
-  const save = () => {
-    const p: Project = {
-      id: initial?.id ?? uid(),
-      name: name.trim(),
-      description: description.trim() || undefined,
-      createdAt: initial?.createdAt ?? Date.now(),
-    }
-    s.saveProject(p)
-    onClose()
-    if (!initial) {
-      s.setProject(p.id)
-      go('experiments')
+  const fail = (e: unknown) => {
+    setServerError(e instanceof ApiError ? { code: e.code, message: e.message } : { code: 'UNKNOWN', message: String(e) })
+    setBusy(false)
+  }
+
+  const save = async () => {
+    setBusy(true)
+    setServerError(null)
+    try {
+      if (initial) {
+        await s.updateProject(initial.id, { name: name.trim(), description: description.trim() })
+        onClose()
+      } else {
+        const p = await s.createProject({ name: name.trim(), description: description.trim() })
+        onClose()
+        s.setProject(p.id)
+        go('experiments')
+      }
+    } catch (e) {
+      fail(e)
     }
   }
 
-  const remove = () => {
+  const remove = async () => {
     if (!initial) return
-    const n = s.experiments.filter((e) => e.projectId === initial.id).length
+    const n = s.experiments.filter((e) => e.projectId === String(initial.id)).length
     if (confirm(`Delete "${initial.name}"? This deletes its library, ${n} experiment${n === 1 ? '' : 's'} and all their runs. It can't be undone.`)) {
-      s.deleteProject(initial.id)
-      onClose()
+      setBusy(true)
+      setServerError(null)
+      try {
+        await s.deleteProject(initial.id)
+        onClose()
+      } catch (e) {
+        fail(e)
+      }
     }
   }
+
+  const nameError = taken
+    ? 'A project with this name already exists.'
+    : serverError?.code === 'DUPLICATE_NAME' || serverError?.code === 'VALIDATION_ERROR'
+      ? serverError.message
+      : undefined
+  const otherError = serverError && !nameError ? serverError.message : undefined
 
   return (
     <Modal
@@ -145,7 +181,7 @@ export function ProjectForm({ initial, onClose }: { initial?: Project; onClose: 
       footer={
         <>
           {initial && (
-            <Button variant="danger" className="mr-auto" onClick={remove}>
+            <Button variant="danger" className="mr-auto" disabled={busy} onClick={remove}>
               <Trash size={15} /> Delete
             </Button>
           )}
@@ -153,7 +189,7 @@ export function ProjectForm({ initial, onClose }: { initial?: Project; onClose: 
             Cancel
           </Button>
           <Button variant="primary" disabled={!ok} onClick={save}>
-            {initial ? 'Save' : 'Create project'}
+            {busy ? 'Saving…' : initial ? 'Save' : 'Create project'}
           </Button>
         </>
       }
@@ -165,12 +201,19 @@ export function ProjectForm({ initial, onClose }: { initial?: Project; onClose: 
           if (ok) save()
         }}
       >
-        <Field label="Name" error={taken ? 'A project with this name already exists.' : undefined}>
-          {(id) => <input id={id} className={inputCls} placeholder="e.g. Support desk" value={name} onChange={(e) => setName(e.target.value)} />}
+        <Field label="Name" error={nameError}>
+          {(id) => (
+            <input id={id} className={inputCls} placeholder="e.g. Support desk" maxLength={100} value={name} onChange={(e) => { setName(e.target.value); setServerError(null) }} />
+          )}
         </Field>
         <Field label="Description (optional)" help="What app or feature these prompts belong to.">
-          {(id) => <textarea id={id} rows={3} className={textareaCls} value={description} onChange={(e) => setDescription(e.target.value)} />}
+          {(id) => <textarea id={id} rows={3} maxLength={500} className={textareaCls} value={description} onChange={(e) => setDescription(e.target.value)} />}
         </Field>
+        {otherError && (
+          <p role="alert" className="text-sm text-danger">
+            {otherError}
+          </p>
+        )}
       </form>
     </Modal>
   )

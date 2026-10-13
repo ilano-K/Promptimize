@@ -1,0 +1,16 @@
+meta {
+  name: Read - Valid
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/projects
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  forwardAuthorizationHeader: false
+}

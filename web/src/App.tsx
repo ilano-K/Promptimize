@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Shell } from './components/Shell'
 import { Compare } from './pages/Compare'
 import { Experiment } from './pages/Experiment'
@@ -11,7 +12,11 @@ import { useStore } from './store'
 
 export default function App() {
   const { parts, query } = useRoute()
-  const hasProject = useStore((s) => s.projects.some((p) => p.id === s.projectId))
+  const hasProject = useStore((s) => s.projects.some((p) => String(p.id) === s.projectId))
+  const loadProjects = useStore((s) => s.loadProjects)
+  useEffect(() => {
+    void loadProjects()
+  }, [loadProjects])
   let section = parts[0] ?? 'projects'
   // Project pages need an open project; without one, show the project list.
   if (!hasProject && section !== 'settings') section = 'projects'

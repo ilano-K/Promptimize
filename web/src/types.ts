@@ -5,12 +5,9 @@ export type Label = 'train' | 'validation' | 'test'
 export type CharType = 'text' | 'number'
 export type JudgeMode = 'individual' | 'batch'
 
-export interface Project {
-  id: string
-  name: string
-  description?: string
-  createdAt?: number
-}
+// Projects live on the server (SQLite), so their shape comes from the shared package.
+// The other objects below are still prototype data held in the browser.
+export type { Project } from '@promptimize/shared'
 
 export interface Input {
   id: string

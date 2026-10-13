@@ -35,7 +35,7 @@ const nav = [
 
 export function Shell({ section, children }: { section: string; children: ReactNode }) {
   const [theme, setTheme] = useTheme()
-  const current = useStore((s) => s.projects.find((p) => p.id === s.projectId))
+  const current = useStore((s) => s.projects.find((p) => String(p.id) === s.projectId))
 
   const link = (key: string, label: string, Icon: Icon) => {
     const active = section === key

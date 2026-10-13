@@ -1,0 +1,16 @@
+meta {
+  name: Delete
+  type: http
+  seq: 13
+}
+
+delete {
+  url: api/projects/1
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  forwardAuthorizationHeader: false
+}

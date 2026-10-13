@@ -2,13 +2,7 @@
 
 import { snapshotProviders } from './providers'
 import { generateOutput, judgeOutput } from './sim'
-import type { Experiment, Input, Judge, Project, Prompt, Run, Settings } from './types'
-
-
-export const projects: Project[] = [
-  { id: 'p1', name: 'Support desk', description: 'Prompts behind the helpdesk: ticket summaries and triage.', createdAt: Date.now() - 6 * 86_400_000 },
-  { id: 'p2', name: 'Docs Q&A', createdAt: Date.now() - 86_400_000 },
-]
+import type { Experiment, Input, Judge, Prompt, Run, Settings } from './types'
 
 const t = (id: string, name: string, label: Input['label'], content: string): Input => ({
   id,

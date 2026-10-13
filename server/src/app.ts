@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Health } from "@promptimize/shared";
 import { errorHandler } from "./errors";
+import { projectRoutes } from "./routes/projects";
 
 export const app = new Hono();
 
@@ -17,4 +18,5 @@ app.notFound((c) => {
   );
 });
 
+app.route("/api/projects", projectRoutes);
 app.get("/api/health", (c) => c.json<Health>({ ok: true }));

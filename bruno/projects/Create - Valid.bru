@@ -1,0 +1,29 @@
+meta {
+  name: Create - Valid
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/projects
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "My Project",
+    "description": "Testing the endpoint"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  bru.setEnvVar("projectId", String(body.id));
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  forwardAuthorizationHeader: false
+}

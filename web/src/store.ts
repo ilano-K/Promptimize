@@ -4,8 +4,10 @@
 // keeps your work (runs in flight on reload are marked as stopped, like a
 // server restart marks them "interrupted").
 
+import type { CreateProjectBody, UpdateProjectBody } from '@promptimize/shared'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { projectsApi } from './api'
 import { snapshotProviders } from './providers'
 import * as seed from './seed'
 import { batchJudgeFails, generateOutput, goodEnough, judgeOutput, optimizePrompt, roundNote, sleep } from './sim'
@@ -25,7 +27,11 @@ import type {
 export const uid = () => crypto.randomUUID().slice(0, 8)
 
 interface Data {
+  /** Projects come from the server (SQLite) and aren't saved in localStorage. */
   projects: Project[]
+  projectsStatus: 'loading' | 'ready' | 'error'
+  projectsError?: string
+  /** The open project's id as a string (the library and experiments still key on strings). */
   projectId: string
   inputs: Input[]
   prompts: Prompt[]
@@ -45,9 +51,12 @@ interface OptimizeConfig {
 }
 
 interface Actions {
-  setProject: (id: string) => void
-  saveProject: (p: Project) => void
-  deleteProject: (id: string) => void
+  loadProjects: () => Promise<void>
+  setProject: (id: number) => void
+  /** Create/update/delete reject with an ApiError when the server refuses. */
+  createProject: (body: CreateProjectBody) => Promise<Project>
+  updateProject: (id: number, body: UpdateProjectBody) => Promise<Project>
+  deleteProject: (id: number) => Promise<void>
   saveInput: (i: Input) => void
   savePrompt: (p: Prompt) => void
   saveJudge: (j: Judge) => void
@@ -67,8 +76,9 @@ interface Actions {
 }
 
 const initial = (): Data => ({
-  projects: seed.projects,
-  projectId: 'p1',
+  projects: [],
+  projectsStatus: 'loading',
+  projectId: '',
   inputs: seed.inputs,
   prompts: seed.prompts,
   judges: seed.judges,
@@ -246,24 +256,43 @@ export const useStore = create<Data & Actions>()(
       return {
         ...initial(),
 
-        setProject: (id) => set({ projectId: id }),
-        saveProject: (p) => set((s) => ({ projects: upsert(s.projects, p) })),
-        /** Deletes the project and everything in it: library objects, experiments, runs and loops. */
-        deleteProject: (id) =>
+        loadProjects: async () => {
+          set({ projectsStatus: 'loading', projectsError: undefined })
+          try {
+            set({ projects: await projectsApi.list(), projectsStatus: 'ready' })
+          } catch (e) {
+            set({ projectsStatus: 'error', projectsError: e instanceof Error ? e.message : String(e) })
+          }
+        },
+        setProject: (id) => set({ projectId: String(id) }),
+        createProject: async (body) => {
+          const p = await projectsApi.create(body)
+          set((s) => ({ projects: [p, ...s.projects] }))
+          return p
+        },
+        updateProject: async (id, body) => {
+          const p = await projectsApi.update(id, body)
+          set((s) => ({ projects: s.projects.map((x) => (x.id === id ? p : x)) }))
+          return p
+        },
+        /** Deletes the project on the server, then its library objects, experiments, runs and loops here. */
+        deleteProject: async (id) => {
+          await projectsApi.remove(id)
+          const key = String(id)
           set((s) => {
-            const expIds = new Set(s.experiments.filter((e) => e.projectId === id).map((e) => e.id))
-            const projects = s.projects.filter((p) => p.id !== id)
+            const expIds = new Set(s.experiments.filter((e) => e.projectId === key).map((e) => e.id))
             return {
-              projects,
-              projectId: s.projectId === id ? (projects[0]?.id ?? '') : s.projectId,
-              inputs: s.inputs.filter((x) => x.projectId !== id),
-              prompts: s.prompts.filter((x) => x.projectId !== id),
-              judges: s.judges.filter((x) => x.projectId !== id),
-              experiments: s.experiments.filter((x) => x.projectId !== id),
+              projects: s.projects.filter((p) => p.id !== id),
+              projectId: s.projectId === key ? '' : s.projectId,
+              inputs: s.inputs.filter((x) => x.projectId !== key),
+              prompts: s.prompts.filter((x) => x.projectId !== key),
+              judges: s.judges.filter((x) => x.projectId !== key),
+              experiments: s.experiments.filter((x) => x.projectId !== key),
               runs: s.runs.filter((r) => !expIds.has(r.experimentId)),
               loops: s.loops.filter((l) => !expIds.has(l.experimentId)),
             }
-          }),
+          })
+        },
 
         saveInput: (i) => set((s) => ({ inputs: upsert(s.inputs, i) })),
         savePrompt: (p) => set((s) => ({ prompts: upsert(s.prompts, p) })),
@@ -347,16 +376,25 @@ export const useStore = create<Data & Actions>()(
         },
 
         updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
-        resetDemo: () => set(initial()),
+        // Projects are real data on the server, so a demo reset leaves them alone.
+        resetDemo: () => {
+          const { projects, projectsStatus, projectsError, projectId } = get()
+          set({ ...initial(), projects, projectsStatus, projectsError, projectId })
+        },
       }
     },
     {
       name: 'promptimize-prototype',
-      version: 2,
+      version: 3,
       // v2 changed the provider shape (kind, models, base URL); older saves get the example providers.
+      // v3 moved projects to the server; the old browser copies (string ids) are dropped.
       migrate: (state, version) => {
         const s = state as Data
         if (version < 2) s.settings = seed.settings
+        if (version < 3) {
+          delete (s as Partial<Data>).projects
+          s.projectId = ''
+        }
         return s
       },
       onRehydrateStorage: () => (state) => {
@@ -369,7 +407,6 @@ export const useStore = create<Data & Actions>()(
         )
       },
       partialize: (s) => ({
-        projects: s.projects,
         projectId: s.projectId,
         inputs: s.inputs,
         prompts: s.prompts,
