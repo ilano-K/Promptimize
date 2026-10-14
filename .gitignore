@@ -25,6 +25,9 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 
+# Bruno API client
+bruno/
+
 # Claude Code, learning notes and design docs (local only)
 .claude/
 .vibe-wise/
