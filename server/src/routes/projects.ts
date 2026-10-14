@@ -26,16 +26,9 @@ projectRoutes.post("/", validateJson(createProjectBody), async (c) => {
     const [project] = await db.insert(projects).values(data).returning();
 
     return c.json(project, 201);
-  } catch (error: any) {
+  } catch (error) {
     // On duplicate project name
-    if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
-      throw new ApiError(
-        409,
-        "DUPLICATE_NAME",
-        "A project with this name already exists",
-      );
-    }
-    throw error;
+    throwIfDuplicateName(error);
   }
 });
 
@@ -60,17 +53,21 @@ projectRoutes.patch("/:id", validateJson(updateProjectBody), async (c) => {
   const data = c.req.valid("json");
   validateId(id);
 
-  const [project] = await db
-    .update(projects)
-    .set(data)
-    .where(eq(projects.id, id))
-    .returning();
+  try {
+    const [project] = await db
+      .update(projects)
+      .set(data)
+      .where(eq(projects.id, id))
+      .returning();
 
-  if (!project) {
-    throw new ApiError(404, "NOT_FOUND", "Project not found");
+    if (!project) {
+      throw new ApiError(404, "NOT_FOUND", "Project not found");
+    }
+
+    return c.json(project, 200);
+  } catch (error) {
+    throwIfDuplicateName(error);
   }
-
-  return c.json(project, 200);
 });
 
 projectRoutes.delete("/:id", async (c) => {
@@ -85,4 +82,19 @@ function validateId(id: number) {
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw new ApiError(400, "VALIDATION_ERROR", "Invalid project ID");
   }
+}
+
+function throwIfDuplicateName(error: unknown) {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "SQLITE_CONSTRAINT_UNIQUE"
+  ) {
+    throw new ApiError(
+      409,
+      "DUPLICATE_NAME",
+      "A project with this name already exists",
+    );
+  }
+  throw error;
 }
