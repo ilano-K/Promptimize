@@ -1,4 +1,5 @@
 import { ArrowsClockwise, CheckCircle, Eye, EyeSlash, Key, PencilSimple, Plug, Plus, Trash, WarningCircle, X } from '@phosphor-icons/react'
+import type { CreateProviderBody, UpdateProviderBody } from '@promptimize/shared'
 import { useState } from 'react'
 import { Button, Empty, Field, inputCls, Modal, ModelSelect, PageHeader, Panel, Tag } from '../components/ui'
 import { fetchModels, kindInfo, PROVIDER_KINDS, slug, testConnection } from '../providers'
@@ -78,9 +79,12 @@ export function Settings() {
 
 function useProviders() {
   const s = useStore()
-  const setProviders = (fn: (ps: Provider[]) => Provider[]) => s.updateSettings({ providers: fn(s.settings.providers) })
-  const patch = (id: string, change: Partial<Provider>) => setProviders((ps) => ps.map((p) => (p.id === id ? { ...p, ...change } : p)))
-  return { s, setProviders, patch }
+  return {
+    s,
+    add: (body: CreateProviderBody) => s.addProvider(body),
+    patch: (id: string, change: UpdateProviderBody) => s.updateProvider(id, change),
+    remove: (id: string) => s.removeProvider(id),
+  }
 }
 
 type Status = { state: 'idle' } | { state: 'pending'; text: string } | { state: 'ok' | 'error'; text: string }
@@ -104,7 +108,7 @@ function StatusLine({ status }: { status: Status }) {
 }
 
 function ProviderCard({ provider: p, onEdit, onKey }: { provider: Provider; onEdit: () => void; onKey: () => void }) {
-  const { s, setProviders, patch } = useProviders()
+  const { s, patch, remove } = useProviders()
   const info = kindInfo(p.kind)
   const [draft, setDraft] = useState('')
   const [adding, setAdding] = useState(false)
@@ -139,7 +143,7 @@ function ProviderCard({ provider: p, onEdit, onKey }: { provider: Provider; onEd
     const msg = used
       ? `Remove ${p.name}? ${used} of its models are in use; those prompts and judges will show "not configured".`
       : `Remove ${p.name} and its ${p.models.length} models?`
-    if (confirm(msg)) setProviders((ps) => ps.filter((x) => x.id !== p.id))
+    if (confirm(msg)) void remove(p.id)
   }
 
   const keyNeeded = info.keyRequired && !p.hasKey
@@ -209,7 +213,7 @@ function ProviderCard({ provider: p, onEdit, onKey }: { provider: Provider; onEd
         )}
         <span className="ml-auto flex gap-1">
           {p.hasKey && (
-            <Button size="sm" variant="ghost" onClick={() => patch(p.id, { hasKey: false })}>
+            <Button size="sm" variant="ghost" onClick={() => patch(p.id, { apiKey: '' })}>
               Remove key
             </Button>
           )}
@@ -378,7 +382,7 @@ function PickModels({
 
 /** Add a provider (pick a kind first) or edit an existing one's name and base URL. */
 function ProviderForm({ initial, onClose }: { initial?: Provider; onClose: () => void }) {
-  const { s, setProviders, patch } = useProviders()
+  const { s, add, patch } = useProviders()
   const [kind, setKind] = useState<ProviderKind | null>(initial?.kind ?? null)
   const info = kind ? kindInfo(kind) : null
   const [name, setName] = useState(initial?.name ?? '')
@@ -388,7 +392,12 @@ function ProviderForm({ initial, onClose }: { initial?: Provider; onClose: () =>
   const [custom, setCustom] = useState('')
   const [fetched, setFetched] = useState<string[]>([])
   const [status, setStatus] = useState<Status>({ state: 'idle' })
-  const target = () => ({ kind: kind!, baseUrl: baseUrl.trim() || undefined, hasKey: key.trim().length > 0 })
+  const target = () => ({
+    kind: kind!,
+    baseUrl: baseUrl.trim() || undefined,
+    hasKey: key.trim().length > 0,
+    apiKey: key.trim() || undefined,
+  })
   const test = async () => {
     setStatus({ state: 'pending', text: 'Testing connection...' })
     const r = await testConnection(target())
@@ -422,20 +431,20 @@ function ProviderForm({ initial, onClose }: { initial?: Provider; onClose: () =>
   }
   const ok = info && name.trim() && !nameTaken && !urlError && (!info.baseUrlRequired || baseUrl.trim())
 
-  const save = () => {
+  const save = async () => {
     if (!ok || !kind) return
-    if (initial) {
-      patch(initial.id, { name: name.trim(), baseUrl: baseUrl.trim() || undefined })
-    } else {
-      // The id prefixes every model id ("anthropic/claude-..."), so it must be unique and stable.
-      let id = slug(name)
-      const ids = new Set(s.settings.providers.map((p) => p.id))
-      for (let n = 2; ids.has(id); n++) id = `${slug(name)}-${n}`
-      // A model name typed but not yet added still counts.
-      const all = custom.trim() && !models.includes(custom.trim()) ? [...models, custom.trim()] : models
-      setProviders((ps) => [...ps, { id, kind, name: name.trim(), baseUrl: baseUrl.trim() || undefined, hasKey: key.trim().length > 0, models: all }])
+    try {
+      if (initial) {
+        await patch(initial.id, { name: name.trim(), baseUrl: baseUrl.trim() || undefined })
+      } else {
+        // A model name typed but not yet added still counts.
+        const all = custom.trim() && !models.includes(custom.trim()) ? [...models, custom.trim()] : models
+        await add({ name: name.trim(), kind, baseUrl: baseUrl.trim() || undefined, apiKey: key.trim() || undefined, models: all })
+      }
+      onClose()
+    } catch (e) {
+      setStatus({ state: 'error', text: e instanceof Error ? e.message : 'Could not save the provider.' })
     }
-    onClose()
   }
 
   if (!info) {
@@ -474,7 +483,7 @@ function ProviderForm({ initial, onClose }: { initial?: Provider; onClose: () =>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={!ok} onClick={save}>
+          <Button variant="primary" disabled={!ok} onClick={() => void save()}>
             {initial ? 'Save' : 'Add provider'}
           </Button>
         </>
@@ -626,7 +635,7 @@ function KeyForm({ provider, onClose }: { provider: Provider; onClose: () => voi
             variant="primary"
             disabled={!key.trim()}
             onClick={() => {
-              patch(provider.id, { hasKey: true })
+              void patch(provider.id, { apiKey: key.trim() })
               onClose()
             }}
           >

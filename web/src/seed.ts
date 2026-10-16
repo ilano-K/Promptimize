@@ -119,12 +119,8 @@ export const experiments: Experiment[] = [
 ]
 
 export const settings: Settings = {
-  defaultOptimizerModel: 'anthropic/claude-sonnet-5-5',
-  providers: [
-    { id: 'anthropic', kind: 'anthropic', name: 'Anthropic', hasKey: true, models: ['claude-sonnet-5-5', 'claude-haiku-5-5'] },
-    { id: 'openai', kind: 'openai', name: 'OpenAI', hasKey: true, models: ['gpt-5-mini'] },
-    { id: 'ollama', kind: 'ollama', name: 'Ollama', baseUrl: 'http://localhost:11434/v1', hasKey: false, models: ['llama3.1:8b'] },
-  ],
+  defaultOptimizerModel: '',
+  providers: [],
 }
 
 function finishedRun(id: string, e: Experiment, startedAt: number, judgeError = false): Run {

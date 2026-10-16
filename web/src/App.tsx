@@ -14,9 +14,11 @@ export default function App() {
   const { parts, query } = useRoute()
   const hasProject = useStore((s) => s.projects.some((p) => String(p.id) === s.projectId))
   const loadProjects = useStore((s) => s.loadProjects)
+  const loadSettings = useStore((s) => s.loadSettings)
   useEffect(() => {
     void loadProjects()
-  }, [loadProjects])
+    void loadSettings()
+  }, [loadProjects, loadSettings])
   let section = parts[0] ?? 'projects'
   // Project pages need an open project; without one, show the project list.
   if (!hasProject && section !== 'settings') section = 'projects'

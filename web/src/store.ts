@@ -4,10 +4,10 @@
 // keeps your work (runs in flight on reload are marked as stopped, like a
 // server restart marks them "interrupted").
 
-import type { CreateProjectBody, UpdateProjectBody } from '@promptimize/shared'
+import type { CreateProjectBody, CreateProviderBody, UpdateProjectBody, UpdateProviderBody } from '@promptimize/shared'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { projectsApi } from './api'
+import { projectsApi, settingsApi } from './api'
 import { snapshotProviders } from './providers'
 import * as seed from './seed'
 import { batchJudgeFails, generateOutput, goodEnough, judgeOutput, optimizePrompt, roundNote, sleep } from './sim'
@@ -71,7 +71,12 @@ interface Actions {
   runTest: (loopId: string, round: number) => void
   saveRoundPrompt: (loopId: string, round: number, name: string) => string
   experimentFromRound: (loopId: string, round: number, name: string) => string
-  updateSettings: (s: Partial<Settings>) => void
+  updateSettings: (patch: Partial<Settings>) => Promise<void>
+  /** Providers live on the server. These call the API, then mirror the response into the store. */
+  loadSettings: () => Promise<void>
+  addProvider: (body: CreateProviderBody) => Promise<Provider>
+  updateProvider: (id: string, body: UpdateProviderBody) => Promise<Provider>
+  removeProvider: (id: string) => Promise<void>
   resetDemo: () => void
 }
 
@@ -375,7 +380,35 @@ export const useStore = create<Data & Actions>()(
           return e.id
         },
 
-        updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+        // The server owns settings. On load we overwrite the cached copy; if the
+        // server is down we keep showing the cache instead of an empty screen.
+        loadSettings: async () => {
+          try {
+            const s = await settingsApi.get()
+            set({ settings: { defaultOptimizerModel: s.defaultOptimizerModel, providers: s.providers } })
+          } catch {}
+        },
+        addProvider: async (body) => {
+          const p = await settingsApi.addProvider(body)
+          set((s) => ({ settings: { ...s.settings, providers: [...s.settings.providers, p] } }))
+          return p
+        },
+        updateProvider: async (id, body) => {
+          const p = await settingsApi.updateProvider(id, body)
+          set((s) => ({ settings: { ...s.settings, providers: s.settings.providers.map((x) => (x.id === id ? p : x)) } }))
+          return p
+        },
+        removeProvider: async (id) => {
+          await settingsApi.deleteProvider(id)
+          set((s) => ({ settings: { ...s.settings, providers: s.settings.providers.filter((x) => x.id !== id) } }))
+        },
+
+        updateSettings: async (patch: Partial<Settings>) => {
+          set((s) => ({ settings: { ...s.settings, ...patch } }))
+          try {
+            await settingsApi.update(patch)
+          } catch {}
+        },
         // Projects are real data on the server, so a demo reset leaves them alone.
         resetDemo: () => {
           const { projects, projectsStatus, projectsError, projectId } = get()

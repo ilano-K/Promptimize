@@ -2,7 +2,20 @@
 // @promptimize/shared so the web app and the server can't drift apart.
 
 import { project } from '@promptimize/shared'
-import type { ApiErrorBody, CreateProjectBody, Project, UpdateProjectBody } from '@promptimize/shared'
+import type {
+  ApiErrorBody,
+  CreateProjectBody,
+  CreateProviderBody,
+  FetchModelsResponse,
+  Project,
+  ProviderConnectionBody,
+  SafeProvider,
+  SettingsResponse,
+  TestConnectionResponse,
+  UpdateProjectBody,
+  UpdateProviderBody,
+  UpdateSettingsBody,
+} from '@promptimize/shared'
 
 export class ApiError extends Error {
   status: number
@@ -37,11 +50,28 @@ async function request(method: string, path: string, body?: unknown): Promise<un
 }
 
 export const projectsApi = {
-  list: async (): Promise<Project[]> => project.array().parse(await request('GET', '/projects')),
-  create: async (body: CreateProjectBody): Promise<Project> => project.parse(await request('POST', '/projects', body)),
+  list: async (): Promise<Project[]> => project.array().parse(await request('GET', '/v1/projects')),
+  create: async (body: CreateProjectBody): Promise<Project> => project.parse(await request('POST', '/v1/projects', body)),
   update: async (id: number, body: UpdateProjectBody): Promise<Project> =>
-    project.parse(await request('PATCH', `/projects/${id}`, body)),
+    project.parse(await request('PATCH', `/v1/projects/${id}`, body)),
   remove: async (id: number): Promise<void> => {
-    await request('DELETE', `/projects/${id}`)
+    await request('DELETE', `/v1/projects/${id}`)
   },
+}
+
+export const settingsApi = {
+  get: async (): Promise<SettingsResponse> => (await request('GET', '/v1/settings')) as SettingsResponse,
+  update: async (body: UpdateSettingsBody): Promise<{ defaultOptimizerModel: string }> =>
+    (await request('PATCH', '/v1/settings', body)) as { defaultOptimizerModel: string },
+  addProvider: async (body: CreateProviderBody): Promise<SafeProvider> =>
+    (await request('POST', '/v1/settings', body)) as SafeProvider,
+  updateProvider: async (id: string, body: UpdateProviderBody): Promise<SafeProvider> =>
+    (await request('PATCH', `/v1/settings/${id}`, body)) as SafeProvider,
+  deleteProvider: async (id: string): Promise<void> => {
+    await request('DELETE', `/v1/settings/${id}`)
+  },
+  testConnection: async (body: ProviderConnectionBody): Promise<TestConnectionResponse> =>
+    (await request('POST', '/v1/settings/test-connection', body)) as TestConnectionResponse,
+  fetchModels: async (body: ProviderConnectionBody): Promise<FetchModelsResponse> =>
+    (await request('POST', '/v1/settings/fetch-models', body)) as FetchModelsResponse,
 }

@@ -72,51 +72,47 @@ export function slug(name: string): string {
 // ---- Simulated provider checks. The real server makes a tiny model call (test)
 // or calls the provider's model list endpoint (fetch). Keys never leave the server.
 
+import { settingsApi } from './api'
+
 interface Target {
   kind: ProviderKind
   baseUrl?: string
-  hasKey: boolean
+  hasKey?: boolean
+  apiKey?: string
 }
 
 type Check<T> = ({ ok: true } & T) | { ok: false; error: string }
 
-const CATALOG: Record<ProviderKind, string[]> = {
-  anthropic: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-1', 'claude-sonnet-4-5'],
-  openai: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'],
-  google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'],
-  openrouter: [
-    'anthropic/claude-sonnet-5-5',
-    'openai/gpt-5-mini',
-    'google/gemini-2.5-flash',
-    'meta-llama/llama-3.3-70b-instruct',
-    'mistralai/mistral-small-3.2',
-    'deepseek/deepseek-chat',
-    'qwen/qwen3-235b-a22b',
-  ],
-  ollama: ['llama3.1:8b', 'qwen2.5:7b', 'mistral:7b', 'gemma3:12b', 'phi4:14b'],
-  'openai-compatible': ['qwen2.5-72b-instruct', 'llama-3.3-70b-instruct', 'mistral-small-3.2', 'text-embedding-3-small'],
-}
-
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-function reach(t: Target): string | null {
-  if (kindInfo(t.kind).keyRequired && !t.hasKey) return '401 Unauthorized: no API key set.'
-  if (kindInfo(t.kind).baseUrlRequired && !t.baseUrl) return 'No base URL set.'
-  return null
-}
-
 export async function testConnection(t: Target): Promise<Check<{ ms: number }>> {
-  await wait(700 + Math.random() * 500)
-  const err = reach(t)
-  if (err) return { ok: false, error: err }
-  return { ok: true, ms: Math.round(180 + Math.random() * 420) }
+  try {
+    const res = await settingsApi.testConnection({
+      kind: t.kind,
+      baseUrl: t.baseUrl || undefined,
+      apiKey: t.apiKey || undefined,
+    })
+    if (!res.success) {
+      return { ok: false, error: res.error ?? `Connection failed with status ${res.status}` }
+    }
+    return { ok: true, ms: res.ms }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Connection failed' }
+  }
 }
 
 export async function fetchModels(t: Target): Promise<Check<{ models: string[] }>> {
-  await wait(900)
-  const err = reach(t)
-  if (err) return { ok: false, error: err }
-  return { ok: true, models: CATALOG[t.kind] }
+  try {
+    const res = await settingsApi.fetchModels({
+      kind: t.kind,
+      baseUrl: t.baseUrl || undefined,
+      apiKey: t.apiKey || undefined,
+    })
+    if (!res.success) {
+      return { ok: false, error: res.error ?? 'Failed to fetch models' }
+    }
+    return { ok: true, models: res.models }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Failed to fetch models' }
+  }
 }
 
 /** Provider kind + base URL for every provider behind the given model ids, for a run snapshot. */
