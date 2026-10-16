@@ -97,6 +97,20 @@ settingsRoutes.patch("/:id", validateJson(updateProviderBody), (c) => {
   return c.json(toSafeProvider(targetProvider), 200);
 });
 
+// Remove provider
+settingsRoutes.delete("/:id", (c) => {
+  const config = getConfig();
+  const id = c.req.param("id");
+
+  if (!config.providers.some((p) => p.id === id))
+    throw new ApiError(404, "NOT_FOUND", "Provider not found");
+
+  config.providers = config.providers.filter((p) => p.id !== id);
+  saveConfig(config);
+
+  return c.body(null, 204);
+});
+
 // Update default optimizer
 settingsRoutes.patch("/", validateJson(updateSettingsBody), (c) => {
   const data = c.req.valid("json");
