@@ -2,4 +2,6 @@
 export * from "./projects.js";
 export * from "./statuses.js";
 export * from "./error.js";
+export * from "./settings.js";
+
 export type Health = { ok: true };
