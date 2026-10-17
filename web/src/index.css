@@ -51,7 +51,7 @@
     --diff-add: #0f2e1d;
     --diff-del: #3a1517;
     --scrim: rgb(0 0 0 / 0.65);
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
     color-scheme: dark;
   }
 }

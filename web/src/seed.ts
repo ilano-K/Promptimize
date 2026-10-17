@@ -60,9 +60,9 @@ export const judges: Judge[] = [
     basePrompt:
       'You review ticket summaries written for support agents.\n\nclarity: 1.0 = an agent can act after one read; 0.5 = needs a re-read; 0.0 = confusing.\naccuracy: 1.0 = every claim is in the ticket; 0.0 = invents facts.\ntone: short written feedback on wording.',
     characteristics: [
-      { name: 'clarity', type: 'number' },
-      { name: 'accuracy', type: 'number' },
-      { name: 'tone', type: 'text' },
+      { id: 'c1', name: 'clarity', type: 'number' },
+      { id: 'c2', name: 'accuracy', type: 'number' },
+      { id: 'c3', name: 'tone', type: 'text' },
     ],
   },
   {
@@ -72,7 +72,7 @@ export const judges: Judge[] = [
     model: 'openai/gpt-5-mini',
     mode: 'batch',
     basePrompt: 'Score every summary for clarity (0 to 1). 1.0 = actionable after one read.',
-    characteristics: [{ name: 'clarity', type: 'number' }],
+    characteristics: [{ id: 'c1', name: 'clarity', type: 'number' }],
   },
 ]
 
@@ -139,7 +139,7 @@ function finishedRun(id: string, e: Experiment, startedAt: number, judgeError = 
       providers: snapshotProviders(settings.providers, [prompt.model, ...(judge ? [judge.model] : [])]),
     },
     status: judgeError ? 'judge_error' : 'done',
-    error: judgeError ? `Batch judge returned 3 entries for ${ins.length} outputs. Outputs were kept.` : undefined,
+    error: judgeError ? `Batch judge returned ${Math.max(1, ins.length - 2)} entries for ${ins.length} outputs. Outputs were kept.` : undefined,
     results: ins.map((i) => ({
       inputKey: i.id,
       output: generateOutput(prompt, i),

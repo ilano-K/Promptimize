@@ -1,13 +1,26 @@
 import { FolderSimple, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { ApiError } from '../api'
-import { Button, Empty, Field, inputCls, Modal, PageHeader, Tag, textareaCls, timeAgo } from '../components/ui'
+import { Button, Empty, Field, inputCls, Modal, PageHeader, Tag, textareaCls } from '../components/ui'
+import { timeAgo } from '../components/ui.helpers'
 import { go } from '../router'
-import { useStore } from '../store'
+import { useStoreShallow } from '../store'
 import type { Project } from '../types'
 
 export function Projects() {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({
+    projects: st.projects,
+    projectsStatus: st.projectsStatus,
+    projectsError: st.projectsError,
+    projectId: st.projectId,
+    inputs: st.inputs,
+    prompts: st.prompts,
+    judges: st.judges,
+    experiments: st.experiments,
+    runs: st.runs,
+    setProject: st.setProject,
+    loadProjects: st.loadProjects,
+  }))
   const [editing, setEditing] = useState<Project | 'new' | null>(null)
 
   const open = (id: number) => {
@@ -121,7 +134,14 @@ export function Projects() {
 }
 
 export function ProjectForm({ initial, onClose }: { initial?: Project; onClose: () => void }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({
+    projects: st.projects,
+    experiments: st.experiments,
+    createProject: st.createProject,
+    updateProject: st.updateProject,
+    deleteProject: st.deleteProject,
+    setProject: st.setProject,
+  }))
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [busy, setBusy] = useState(false)

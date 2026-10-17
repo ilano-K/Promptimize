@@ -2,6 +2,7 @@
 // to an AI SDK provider package; "openai-compatible" covers anything that
 // speaks the OpenAI API (vLLM, LM Studio, Together, a company gateway, ...).
 
+import { settingsApi } from './api'
 import type { Provider, ProviderKind } from './types'
 
 export interface ProviderKindInfo {
@@ -72,12 +73,9 @@ export function slug(name: string): string {
 // ---- Simulated provider checks. The real server makes a tiny model call (test)
 // or calls the provider's model list endpoint (fetch). Keys never leave the server.
 
-import { settingsApi } from './api'
-
 interface Target {
   kind: ProviderKind
   baseUrl?: string
-  hasKey?: boolean
   apiKey?: string
 }
 

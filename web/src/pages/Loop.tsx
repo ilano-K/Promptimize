@@ -3,12 +3,12 @@ import { diffLines } from 'diff'
 import { useState } from 'react'
 import { Button, Empty, Field, inputCls, LabelTag, Modal, PageHeader, Panel, Score, Tag, Tip } from '../components/ui'
 import { go } from '../router'
-import { averagesFor, useStore } from '../store'
+import { averagesFor, useStoreShallow } from '../store'
 import type { OptimizeLoop, Run } from '../types'
 import { RunView } from './Experiment'
 
 export function Loop({ experimentId, loopId, roundParam }: { experimentId: string; loopId: string; roundParam?: string }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({ loops: st.loops, experiments: st.experiments, runs: st.runs, stopLoop: st.stopLoop }))
   const loop = s.loops.find((l) => l.id === loopId)
   const e = s.experiments.find((x) => x.id === experimentId)
   const [tab, setTab] = useState<'diff' | 'results' | 'test'>('diff')
@@ -244,7 +244,7 @@ function PromptDiff({ before, after, beforeLabel }: { before?: string; after: st
 }
 
 function TestTab({ loop, round, testRun }: { loop: OptimizeLoop; round: number; testRun?: Run }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({ experiments: st.experiments, inputs: st.inputs, runTest: st.runTest }))
   const e = s.experiments.find((x) => x.id === loop.experimentId)!
   const tests = s.inputs.filter((i) => e.inputIds.includes(i.id) && i.label === 'test')
   if (testRun) return <RunView run={testRun} compact />
@@ -275,7 +275,7 @@ function TestTab({ loop, round, testRun }: { loop: OptimizeLoop; round: number; 
 }
 
 function SaveRound({ loop, round, kind, onClose }: { loop: OptimizeLoop; round: number; kind: 'prompt' | 'experiment'; onClose: () => void }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({ experiments: st.experiments, prompts: st.prompts, saveRoundPrompt: st.saveRoundPrompt, experimentFromRound: st.experimentFromRound }))
   const e = s.experiments.find((x) => x.id === loop.experimentId)!
   const base = s.prompts.find((p) => p.id === e.promptId)
   const [name, setName] = useState(kind === 'prompt' ? `${base?.name ?? 'prompt'} v${round + 1}` : `${e.name}, round ${round}`)

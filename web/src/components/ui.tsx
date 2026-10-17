@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { kindInfo } from '../providers'
 import { useModelGroups } from '../store'
 import { Select } from './Select'
+import { labelHelp } from './ui.helpers'
 import type { Label } from '../types'
 
 // Radius system: controls (buttons, inputs, tags) 6px, panels and modals 10px.
@@ -65,12 +66,6 @@ export function LabelTag({ label }: { label: Label }) {
       <span className={`inline-flex h-5 items-center rounded-md px-1.5 font-mono text-[11px] ${styles[label]}`}>{label}</span>
     </Tip>
   )
-}
-
-export const labelHelp: Record<Label, string> = {
-  train: 'The optimizer learns from these in full: inputs, outputs, and judge feedback.',
-  validation: 'Run every round so you can see if changes really help. The optimizer only sees their number scores.',
-  test: 'Never seen during optimizing. Run on demand on the round you pick, as a final check.',
 }
 
 export function Tag({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'accent' | 'warn' | 'danger' }) {
@@ -172,7 +167,10 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
-  close.current = onClose
+  // Keep the latest onClose without re-registering the key listener below.
+  useEffect(() => {
+    close.current = onClose
+  })
   useEffect(() => {
     const token = {}
     modalStack.push(token)
@@ -270,17 +268,4 @@ export function ModelSelect({ id, value, onChange }: { id: string; value: string
   )
 }
 
-/** First configured model id, used as the default for new prompts and judges. */
-export function useDefaultModel(): string {
-  return useModelGroups().flatMap((g) => g.models)[0]?.id ?? ''
-}
 
-export function timeAgo(ts: number): string {
-  const s = Math.round((Date.now() - ts) / 1000)
-  if (s < 60) return 'just now'
-  const m = Math.round(s / 60)
-  if (m < 60) return `${m} min ago`
-  const h = Math.round(m / 60)
-  if (h < 24) return `${h} h ago`
-  return `${Math.round(h / 24)} d ago`
-}

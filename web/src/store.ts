@@ -7,6 +7,7 @@
 import type { CreateProjectBody, CreateProviderBody, UpdateProjectBody, UpdateProviderBody } from '@promptimize/shared'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { useShallow } from 'zustand/react/shallow'
 import { projectsApi, settingsApi } from './api'
 import { snapshotProviders } from './providers'
 import * as seed from './seed'
@@ -404,6 +405,8 @@ export const useStore = create<Data & Actions>()(
         },
 
         updateSettings: async (patch: Partial<Settings>) => {
+          // Optimistic: apply locally first, then persist. If the server is
+          // unreachable we keep the local change rather than reverting silently.
           set((s) => ({ settings: { ...s.settings, ...patch } }))
           try {
             await settingsApi.update(patch)
@@ -459,6 +462,15 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 // ---- Selectors / helpers ----
 
+/**
+ * Like useStore, but re-renders only when the fields the selector picks change.
+ * Use this instead of `const s = useStore()` so a component isn't re-rendered by
+ * unrelated slices (e.g. a Settings screen re-rendering on every run step).
+ */
+export function useStoreShallow<T>(selector: (state: Data & Actions) => T): T {
+  return useStore(useShallow(selector))
+}
+
 export function usedBy(experiments: Experiment[], kind: 'input' | 'prompt' | 'judge', id: string): Experiment[] {
   return experiments.filter((e) =>
     kind === 'input' ? e.inputIds.includes(id) : kind === 'prompt' ? e.promptId === id : e.judgeId === id,
@@ -498,6 +510,11 @@ export interface ModelGroup {
 export function useModelGroups(): ModelGroup[] {
   const providers = useStore((s) => s.settings.providers)
   return providers.map((p) => ({ provider: p, models: p.models.map((m) => ({ id: `${p.id}/${m}`, name: m })) }))
+}
+
+/** First configured model id, used as the default for new prompts and judges. */
+export function useDefaultModel(): string {
+  return useModelGroups().flatMap((g) => g.models)[0]?.id ?? ''
 }
 
 /** Prompts and judges (in any project) that use a given model id. */

@@ -30,6 +30,7 @@ bruno/
 
 # Claude Code, learning notes and design docs (local only)
 .claude/
+.superpowers/
 .vibe-wise/
 *.md
 !/README.md

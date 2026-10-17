@@ -1,8 +1,9 @@
 import { ArrowsLeftRight, Columns, Warning } from '@phosphor-icons/react'
-import { Button, Empty, LabelTag, PageHeader, Panel, Score, Tag, timeAgo } from '../components/ui'
+import { Button, Empty, LabelTag, PageHeader, Panel, Score, Tag } from '../components/ui'
+import { timeAgo } from '../components/ui.helpers'
 import { Select } from '../components/Select'
 import { go } from '../router'
-import { averages, useStore } from '../store'
+import { averages, useStoreShallow } from '../store'
 import type { Run } from '../types'
 import { JudgeResult } from './Experiment'
 
@@ -39,7 +40,12 @@ function differences(a: Run, b: Run): string[] {
 }
 
 export function Compare({ a, b }: { a?: string; b?: string }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({
+    experiments: st.experiments,
+    projectId: st.projectId,
+    runs: st.runs,
+    prompts: st.prompts,
+  }))
   const exps = s.experiments.filter((e) => e.projectId === s.projectId)
   // Each side picks an experiment, then one of its runs (latest by default). Value format: "expId:runId".
   const runsOf = (id: string) => s.runs.filter((r) => r.experimentId === id && !r.loopId && r.status !== 'running').sort((x, y) => y.startedAt - x.startedAt)

@@ -1,8 +1,9 @@
 import { Plus, Trash, Warning } from '@phosphor-icons/react'
 import { useState } from 'react'
-import { uid, usedBy, useStore } from '../store'
+import { uid, useDefaultModel, usedBy, useStore } from '../store'
 import type { Characteristic, Input, Judge, Label, Prompt } from '../types'
-import { Button, Field, inputCls, labelHelp, ModelSelect, useDefaultModel, Modal, monoAreaCls, textareaCls } from './ui'
+import { Button, Field, inputCls, ModelSelect, Modal, monoAreaCls, textareaCls } from './ui'
+import { labelHelp } from './ui.helpers'
 
 type Kind = 'input' | 'prompt' | 'judge'
 
@@ -64,15 +65,16 @@ function useDelete(kind: Kind, id: string | undefined, onClose: () => void) {
 export function InputEditor({ initial, onClose, onSaved }: { initial?: Input; onClose: () => void; onSaved?: (id: string) => void }) {
   const projectId = useStore((s) => s.projectId)
   const save = useStore((s) => s.saveInput)
-  const [v, setV] = useState<Input>(initial ?? { id: uid(), projectId, name: '', content: '', label: 'train' })
+  const [v, setV] = useState<Input>(() => initial ?? { id: uid(), projectId, name: '', content: '', label: 'train' })
   const onDelete = useDelete('input', initial?.id, onClose)
   const ok = v.name.trim() && v.content.trim()
+  const saveAndClose = () => {
+    save(v)
+    onSaved?.(v.id)
+    onClose()
+  }
   return (
-    <Modal
-      title={initial ? 'Edit input' : 'New input'}
-      onClose={onClose}
-      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={() => (save(v), onSaved?.(v.id), onClose())} />}
-    >
+    <Modal title={initial ? 'Edit input' : 'New input'} onClose={onClose} footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={saveAndClose} />}>
       <div className="flex flex-col gap-5">
         <UsedBy kind="input" id={initial?.id} />
         <Field label="Name">{(id) => <input id={id} className={inputCls} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
@@ -107,7 +109,7 @@ export function PromptEditor({ initial, onClose, onSaved }: { initial?: Prompt; 
   const save = useStore((s) => s.savePrompt)
   const defaultModel = useDefaultModel()
   const [v, setV] = useState<Prompt>(
-    initial ?? { id: uid(), projectId, name: '', text: 'Ticket:\n{{input}}', model: defaultModel, outputSchema: '' },
+    () => initial ?? { id: uid(), projectId, name: '', text: 'Ticket:\n{{input}}', model: defaultModel, outputSchema: '' },
   )
   const onDelete = useDelete('prompt', initial?.id, onClose)
   let schemaError: string | undefined
@@ -119,12 +121,17 @@ export function PromptEditor({ initial, onClose, onSaved }: { initial?: Prompt; 
     }
   }
   const ok = v.name.trim() && v.text.trim() && v.model && !schemaError
+  const saveAndClose = () => {
+    save(v)
+    onSaved?.(v.id)
+    onClose()
+  }
   return (
     <Modal
       wide
       title={initial ? 'Edit prompt' : 'New prompt'}
       onClose={onClose}
-      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={() => (save(v), onSaved?.(v.id), onClose())} />}
+      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={saveAndClose} />}
     >
       <div className="flex flex-col gap-5">
         <UsedBy kind="prompt" id={initial?.id} />
@@ -159,15 +166,16 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
   const save = useStore((s) => s.saveJudge)
   const defaultModel = useDefaultModel()
   const [v, setV] = useState<Judge>(
-    initial ?? {
-      id: uid(),
-      projectId,
-      name: '',
-      basePrompt: '',
-      characteristics: [{ name: 'clarity', type: 'number' }],
-      mode: 'individual',
-      model: defaultModel,
-    },
+    () =>
+      initial ?? {
+        id: uid(),
+        projectId,
+        name: '',
+        basePrompt: '',
+        characteristics: [{ id: uid(), name: 'clarity', type: 'number' }],
+        mode: 'individual',
+        model: defaultModel,
+      },
   )
   const onDelete = useDelete('judge', initial?.id, onClose)
   const setChar = (i: number, c: Characteristic) => setV({ ...v, characteristics: v.characteristics.map((x, j) => (j === i ? c : x)) })
@@ -177,13 +185,18 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
 
   const shape = Object.fromEntries(v.characteristics.filter((c) => c.name.trim()).map((c) => [c.name.trim(), c.type === 'number' ? 'number 0-1' : 'string']))
   const preview = v.mode === 'batch' ? [shape, '...one per output'] : shape
+  const saveAndClose = () => {
+    save(v)
+    onSaved?.(v.id)
+    onClose()
+  }
 
   return (
     <Modal
       wide
       title={initial ? 'Edit judge' : 'New judge'}
       onClose={onClose}
-      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={() => (save(v), onSaved?.(v.id), onClose())} />}
+      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={saveAndClose} />}
     >
       <div className="flex flex-col gap-5">
         <UsedBy kind="judge" id={initial?.id} />
@@ -198,7 +211,7 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
         <div className="flex flex-col gap-2">
           <span className="text-[13px] font-medium">Characteristics</span>
           {v.characteristics.map((c, i) => (
-            <div key={i} className="flex gap-2">
+            <div key={c.id ?? `row-${i}`} className="flex gap-2">
               <input
                 aria-label="Characteristic name"
                 className={`${inputCls} font-mono`}
@@ -231,7 +244,7 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
           ))}
           {dupes && <p className="text-xs text-danger">Two characteristics have the same name.</p>}
           <div>
-            <Button size="sm" variant="ghost" onClick={() => setV({ ...v, characteristics: [...v.characteristics, { name: '', type: 'number' }] })}>
+            <Button size="sm" variant="ghost" onClick={() => setV({ ...v, characteristics: [...v.characteristics, { id: uid(), name: '', type: 'number' }] })}>
               <Plus size={14} /> Add characteristic
             </Button>
           </div>

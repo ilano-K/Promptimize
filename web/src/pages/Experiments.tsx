@@ -1,15 +1,23 @@
 import { Flask, Plus } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { InputEditor, JudgeEditor, PromptEditor } from '../components/editors'
-import { Button, Empty, Field, inputCls, LabelTag, Modal, PageHeader, Score, Tag, timeAgo } from '../components/ui'
+import { Button, Empty, Field, inputCls, LabelTag, Modal, PageHeader, Score, Tag } from '../components/ui'
+import { timeAgo } from '../components/ui.helpers'
 import { Select } from '../components/Select'
 import { go } from '../router'
-import { averages, latestRun, uid, useStore } from '../store'
+import { averages, latestRun, uid, useStoreShallow } from '../store'
 import type { Experiment, Label } from '../types'
 import { RunStatusTag } from './Experiment'
 
 export function Experiments() {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({
+    experiments: st.experiments,
+    projectId: st.projectId,
+    prompts: st.prompts,
+    judges: st.judges,
+    runs: st.runs,
+    loops: st.loops,
+  }))
   const [creating, setCreating] = useState(false)
   const list = s.experiments.filter((e) => e.projectId === s.projectId).sort((a, b) => b.createdAt - a.createdAt)
 
@@ -93,20 +101,27 @@ export function Experiments() {
 
 /** Create or edit an experiment. Library objects can be created inline. */
 export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onClose: () => void }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({
+    prompts: st.prompts,
+    judges: st.judges,
+    inputs: st.inputs,
+    projectId: st.projectId,
+    saveExperiment: st.saveExperiment,
+  }))
   const prompts = s.prompts.filter((x) => x.projectId === s.projectId)
   const judges = s.judges.filter((x) => x.projectId === s.projectId)
   const inputs = s.inputs.filter((x) => x.projectId === s.projectId)
   const [v, setV] = useState<Experiment>(
-    initial ?? {
-      id: uid(),
-      projectId: s.projectId,
-      name: '',
-      promptId: prompts[0]?.id ?? '',
-      judgeId: judges[0]?.id ?? null,
-      inputIds: inputs.map((i) => i.id),
-      createdAt: Date.now(),
-    },
+    () =>
+      initial ?? {
+        id: uid(),
+        projectId: s.projectId,
+        name: '',
+        promptId: prompts[0]?.id ?? '',
+        judgeId: judges[0]?.id ?? null,
+        inputIds: inputs.map((i) => i.id),
+        createdAt: Date.now(),
+      },
   )
   const [inline, setInline] = useState<'prompt' | 'judge' | 'input' | null>(null)
   const ok = v.name.trim() && v.promptId && v.inputIds.length > 0

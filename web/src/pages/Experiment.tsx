@@ -1,10 +1,11 @@
 import { ArrowClockwise, ArrowLeft, Columns, PencilSimple, Play, Sparkle, Stop, Trash, WarningCircle } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { JudgeEditor, PromptEditor } from '../components/editors'
-import { Button, Empty, Field, inputCls, LabelTag, Modal, ModelSelect, PageHeader, Panel, Score, Tag, textareaCls, timeAgo } from '../components/ui'
+import { Button, Empty, Field, inputCls, LabelTag, Modal, ModelSelect, PageHeader, Panel, Score, Tag, textareaCls } from '../components/ui'
+import { timeAgo } from '../components/ui.helpers'
 import { Select } from '../components/Select'
 import { go } from '../router'
-import { averages, useStore } from '../store'
+import { averages, useStoreShallow } from '../store'
 import type { Experiment as Exp, Label, Run, RunStatus } from '../types'
 import { ExperimentForm } from './Experiments'
 
@@ -16,7 +17,16 @@ export function RunStatusTag({ status }: { status: RunStatus }) {
 }
 
 export function Experiment({ id, runParam }: { id: string; runParam?: string }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({
+    experiments: st.experiments,
+    prompts: st.prompts,
+    judges: st.judges,
+    inputs: st.inputs,
+    runs: st.runs,
+    loops: st.loops,
+    startRun: st.startRun,
+    deleteExperiment: st.deleteExperiment,
+  }))
   const e = s.experiments.find((x) => x.id === id)
   const [editing, setEditing] = useState<'exp' | 'prompt' | 'judge' | null>(null)
   const [optimizing, setOptimizing] = useState(false)
@@ -206,7 +216,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
 
 /** Progress, averages and per-input results for one run. */
 export function RunView({ run, compact }: { run: Run; compact?: boolean }) {
-  const { retryJudge, stopRun } = useStore()
+  const { retryJudge, stopRun } = useStoreShallow((st) => ({ retryJudge: st.retryJudge, stopRun: st.stopRun }))
   const judge = run.snapshot.judge
   const done = run.results.filter((r) => r.output).length
   const judged = run.results.filter((r) => r.status === 'judged').length
@@ -341,7 +351,7 @@ function Skeleton({ lines }: { lines: number }) {
 }
 
 function OptimizeForm({ experiment, onClose }: { experiment: Exp; onClose: () => void }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({ settings: st.settings, inputs: st.inputs, startOptimize: st.startOptimize }))
   const [mode, setMode] = useState<'1-pass' | 'n-pass'>('n-pass')
   const [maxRounds, setMaxRounds] = useState(4)
   const [earlyStop, setEarlyStop] = useState(true)

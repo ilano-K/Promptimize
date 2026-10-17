@@ -3,11 +3,15 @@ import type { CreateProviderBody, UpdateProviderBody } from '@promptimize/shared
 import { useState } from 'react'
 import { Button, Empty, Field, inputCls, Modal, ModelSelect, PageHeader, Panel, Tag } from '../components/ui'
 import { fetchModels, kindInfo, PROVIDER_KINDS, slug, testConnection } from '../providers'
-import { modelUsage, useStore } from '../store'
+import { modelUsage, useStoreShallow } from '../store'
 import type { Provider, ProviderKind } from '../types'
 
 export function Settings() {
-  const { settings, updateSettings, resetDemo } = useStore()
+  const { settings, updateSettings, resetDemo } = useStoreShallow((st) => ({
+    settings: st.settings,
+    updateSettings: st.updateSettings,
+    resetDemo: st.resetDemo,
+  }))
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Provider | null>(null)
   const [keyFor, setKeyFor] = useState<Provider | null>(null)
@@ -78,7 +82,14 @@ export function Settings() {
 }
 
 function useProviders() {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({
+    settings: st.settings,
+    prompts: st.prompts,
+    judges: st.judges,
+    addProvider: st.addProvider,
+    updateProvider: st.updateProvider,
+    removeProvider: st.removeProvider,
+  }))
   return {
     s,
     add: (body: CreateProviderBody) => s.addProvider(body),
@@ -395,7 +406,6 @@ function ProviderForm({ initial, onClose }: { initial?: Provider; onClose: () =>
   const target = () => ({
     kind: kind!,
     baseUrl: baseUrl.trim() || undefined,
-    hasKey: key.trim().length > 0,
     apiKey: key.trim() || undefined,
   })
   const test = async () => {

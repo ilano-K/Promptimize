@@ -3,13 +3,13 @@ import { useState } from 'react'
 import { InputEditor, JudgeEditor, PromptEditor } from '../components/editors'
 import { Button, Empty, LabelTag, PageHeader, Tag } from '../components/ui'
 import { go } from '../router'
-import { usedBy, useStore } from '../store'
+import { useStoreShallow, usedBy } from '../store'
 import type { Input, Judge, Label, Prompt } from '../types'
 
 type Tab = 'inputs' | 'prompts' | 'judges'
 
 export function Library({ tab }: { tab: Tab }) {
-  const s = useStore()
+  const s = useStoreShallow((st) => ({ inputs: st.inputs, prompts: st.prompts, judges: st.judges, projectId: st.projectId, experiments: st.experiments }))
   const inputs = s.inputs.filter((x) => x.projectId === s.projectId)
   const prompts = s.prompts.filter((x) => x.projectId === s.projectId)
   const judges = s.judges.filter((x) => x.projectId === s.projectId)

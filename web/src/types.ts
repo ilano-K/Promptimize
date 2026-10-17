@@ -27,6 +27,8 @@ export interface Prompt {
 }
 
 export interface Characteristic {
+  /** Stable key for list editing; generated when a row is created. */
+  id?: string
   name: string
   type: CharType
 }
