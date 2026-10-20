@@ -15,6 +15,13 @@
       "when": 1791813771487,
       "tag": "0001_bitter_mimic",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792227061063,
+      "tag": "0002_nappy_mongu",
+      "breakpoints": true
     }
   ]
 }
