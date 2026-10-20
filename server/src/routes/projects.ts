@@ -1,100 +1,72 @@
 import { Hono } from "hono";
-import { db } from "../db";
-import { projects } from "../db/schemas";
-import { desc, eq } from "drizzle-orm";
 import { validateJson } from "../lib/validate";
-import { createProjectBody, updateProjectBody } from "@promptimize/shared";
-import { ApiError } from "../errors";
+import {
+  createProjectBody,
+  createPromptBody,
+  updateProjectBody,
+} from "@promptimize/shared";
+import {
+  createProject,
+  deleteProject,
+  getProject,
+  listProjects,
+  updateProject,
+} from "../services/projects.service";
+import { createPrompt, listPrompts } from "../services/prompts.service";
+import { parseId } from "../lib/parse-id";
 
 export const projectRoutes = new Hono();
 
-// List all projects
+// LIST projects
 projectRoutes.get("/", async (c) => {
-  const rows = await db
-    .select()
-    .from(projects)
-    .orderBy(desc(projects.id))
-    .all();
+  const rows = listProjects();
   return c.json(rows);
 });
 
-// Create project
+// CREATE a project
 projectRoutes.post("/", validateJson(createProjectBody), async (c) => {
   const data = c.req.valid("json");
-
-  try {
-    const [project] = await db.insert(projects).values(data).returning();
-
-    return c.json(project, 201);
-  } catch (error) {
-    // On duplicate project name
-    throwIfDuplicateName(error);
-  }
+  const project = createProject(data);
+  return c.json(project, 201);
 });
 
+// GET a project
 projectRoutes.get("/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-
-  validateId(id);
-  const project = await db.query.projects.findFirst({
-    where: eq(projects.id, id),
-  });
-
-  if (!project) {
-    throw new ApiError(404, "NOT_FOUND", "Project not found");
-  }
-
+  const id = parseId(c.req.param("id"), "project");
+  const project = getProject(id);
   return c.json(project, 200);
 });
 
-// Edit project
+// EDIT a project
 projectRoutes.patch("/:id", validateJson(updateProjectBody), async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = parseId(c.req.param("id"), "project");
   const data = c.req.valid("json");
-  validateId(id);
-
-  try {
-    const [project] = await db
-      .update(projects)
-      .set(data)
-      .where(eq(projects.id, id))
-      .returning();
-
-    if (!project) {
-      throw new ApiError(404, "NOT_FOUND", "Project not found");
-    }
-
-    return c.json(project, 200);
-  } catch (error) {
-    throwIfDuplicateName(error);
-  }
+  const project = updateProject(id, data);
+  return c.json(project, 200);
 });
 
+// DELETE project
 projectRoutes.delete("/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  validateId(id);
-
-  await db.delete(projects).where(eq(projects.id, id));
+  const id = parseId(c.req.param("id"), "project");
+  deleteProject(id);
   return c.body(null, 204);
 });
 
-function validateId(id: number) {
-  if (!Number.isSafeInteger(id) || id <= 0) {
-    throw new ApiError(400, "VALIDATION_ERROR", "Invalid project ID");
-  }
-}
+// ======== PROMPTS IN A PROJECT ===========
 
-function throwIfDuplicateName(error: unknown) {
-  if (
-    error instanceof Error &&
-    "code" in error &&
-    error.code === "SQLITE_CONSTRAINT_UNIQUE"
-  ) {
-    throw new ApiError(
-      409,
-      "DUPLICATE_NAME",
-      "A project with this name already exists",
-    );
-  }
-  throw error;
-}
+// LIST prompts
+projectRoutes.get("/:id/prompts", async (c) => {
+  const id = parseId(c.req.param("id"), "project");
+  const rows = listPrompts(id);
+
+  return c.json(rows);
+});
+
+// CREATE prompt
+projectRoutes.post("/:id/prompts", validateJson(createPromptBody), async (c) => {
+  const projectId = parseId(c.req.param("id"), "project");
+  const data = c.req.valid("json");
+  const prompt = createPrompt(projectId, data);
+
+  return c.json(prompt, 201);
+});
