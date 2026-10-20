@@ -3,7 +3,8 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "DUPLICATE_NAME"
   | "HTTP_ERROR"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "MODEL_NOT_CONFIGURED";
 
 export type ApiErrorBody = {
   error: {
@@ -11,3 +12,8 @@ export type ApiErrorBody = {
     message: string;
   };
 };
+
+export type DomainErrorCode = Exclude<
+  ApiErrorCode,
+  "HTTP_ERROR" | "INTERNAL_ERROR"
+>;

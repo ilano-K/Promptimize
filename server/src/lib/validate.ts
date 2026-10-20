@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import type { ZodType } from "zod";
-import { ApiError } from "../errors.js";
+import { ApiError } from "../errors/api";
 
 export const validateJson = <T extends ZodType>(schema: T) =>
   zValidator("json", schema, (result) => {
