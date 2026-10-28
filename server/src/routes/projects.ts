@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { validateJson } from "../lib/validate";
 import {
+  createInputBody,
+  createJudgeBody,
   createProjectBody,
   createPromptBody,
   updateProjectBody,
@@ -14,6 +16,8 @@ import {
 } from "../services/projects.service";
 import { createPrompt, listPrompts } from "../services/prompts.service";
 import { parseId } from "../lib/parse-id";
+import { createInput, listInputs } from "../services/inputs.service";
+import { createJudge, listJudges } from "../services/judges.service";
 
 export const projectRoutes = new Hono();
 
@@ -63,10 +67,48 @@ projectRoutes.get("/:id/prompts", async (c) => {
 });
 
 // CREATE prompt
-projectRoutes.post("/:id/prompts", validateJson(createPromptBody), async (c) => {
+projectRoutes.post(
+  "/:id/prompts",
+  validateJson(createPromptBody),
+  async (c) => {
+    const projectId = parseId(c.req.param("id"), "project");
+    const data = c.req.valid("json");
+    const prompt = createPrompt(projectId, data);
+
+    return c.json(prompt, 201);
+  },
+);
+
+// ======== INPUTS IN A PROJECT ===========
+
+// LIST inputs
+projectRoutes.get("/:id/inputs", (c) => {
+  const projectId = parseId(c.req.param("id"), "project");
+  const rows = listInputs(projectId);
+  return c.json(rows, 200);
+});
+
+// CREATE inputs
+projectRoutes.post("/:id/inputs", validateJson(createInputBody), (c) => {
   const projectId = parseId(c.req.param("id"), "project");
   const data = c.req.valid("json");
-  const prompt = createPrompt(projectId, data);
+  const inputResource = createInput(projectId, data);
+  return c.json(inputResource, 201);
+});
 
-  return c.json(prompt, 201);
+// ======== JUDGES IN A PROJECT ===========
+
+// LIST judges
+projectRoutes.get("/:id/judges", (c) => {
+  const projectId = parseId(c.req.param("id"), "project");
+  const rows = listJudges(projectId);
+  return c.json(rows, 200);
+});
+
+// CREATE judge
+projectRoutes.post("/:id/judges", validateJson(createJudgeBody), (c) => {
+  const projectId = parseId(c.req.param("id"), "project");
+  const data = c.req.valid("json");
+  const judge = createJudge(projectId, data);
+  return c.json(judge, 201);
 });
