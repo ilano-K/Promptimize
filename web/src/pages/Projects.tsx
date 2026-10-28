@@ -1,6 +1,5 @@
 import { FolderSimple, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
 import { useState } from 'react'
-import { ApiError } from '../api'
 import { Button, Empty, Field, inputCls, Modal, PageHeader, Tag, textareaCls } from '../components/ui'
 import { timeAgo } from '../components/ui.helpers'
 import { go } from '../router'
@@ -150,7 +149,7 @@ export function ProjectForm({ initial, onClose }: { initial?: Project; onClose: 
   const ok = name.trim() && !taken && !busy
 
   const fail = (e: unknown) => {
-    setServerError(e instanceof ApiError ? { code: e.code, message: e.message } : { code: 'UNKNOWN', message: String(e) })
+    setServerError({ code: (e as { code: string }).code ?? 'UNKNOWN', message: (e as { message: string }).message ?? String(e) })
     setBusy(false)
   }
 
