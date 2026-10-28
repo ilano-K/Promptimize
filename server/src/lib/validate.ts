@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import type { ZodType } from "zod";
-import { ApiError } from "../errors/api";
+import { ValidationError } from "../errors/domain";
 
 export const validateJson = <T extends ZodType>(schema: T) =>
   zValidator("json", schema, (result) => {
@@ -8,6 +8,6 @@ export const validateJson = <T extends ZodType>(schema: T) =>
       const message = result.error.issues
         .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
         .join("; ");
-      throw new ApiError(400, "VALIDATION_ERROR", message);
+      throw new ValidationError(message);
     }
   });
