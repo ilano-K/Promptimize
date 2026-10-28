@@ -1,8 +1,5 @@
 import { z } from "zod";
-
-// A JSON Schema object. Stored as JSON text; null means "no schema set".
-export const jsonSchema = z.record(z.string(), z.unknown());
-export type JsonSchema = z.infer<typeof jsonSchema>;
+import { jsonSchema } from "./json-schema.js";
 
 export const prompt = z.object({
   id: z.number(),
