@@ -10,8 +10,6 @@ import { updatePromptBody } from "@promptimize/shared";
 
 export const promptsRoutes = new Hono();
 
-// ======== LIBRARY OBJECTS ===========
-
 // GET prompt
 promptsRoutes.get("/:id", (c) => {
   const id = parseId(c.req.param("id"), "prompt");
