@@ -7,7 +7,7 @@ export const inputs = sqliteTable("inputs", {
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
-  description: text("description").notNull().default(""),
+  description: text("description"),
   label: text("label", {
     enum: ["train", "validation", "test"],
   }).notNull(),
