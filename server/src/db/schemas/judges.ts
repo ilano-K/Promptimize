@@ -7,11 +7,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { projects } from "./projects";
 import { sql } from "drizzle-orm";
-
-type Characteristic = {
-  name: string;
-  type: "text" | "number";
-};
+import type { Characteristic } from "@promptimize/shared";
 
 export const judges = sqliteTable(
   "judges",
