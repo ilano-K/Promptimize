@@ -1,18 +1,36 @@
 // Typed client for the Promptimize server. Request and response shapes come from
 // @promptimize/shared so the web app and the server can't drift apart.
 
-import { project } from '@promptimize/shared'
+import {
+  experiment as experimentSchema,
+  input as inputSchema,
+  judge as judgeSchema,
+  project,
+  prompt as promptSchema,
+} from '@promptimize/shared'
 import type {
   ApiErrorBody,
+  CreateExperimentBody,
+  CreateInputBody,
+  CreateJudgeBody,
   CreateProjectBody,
+  CreatePromptBody,
   CreateProviderBody,
+  Experiment,
   FetchModelsResponse,
+  Input,
+  Judge,
   Project,
+  Prompt,
   ProviderConnectionBody,
   SafeProvider,
-  SettingsResponse,
+  Settings,
   TestConnectionResponse,
+  UpdateExperimentBody,
+  UpdateInputBody,
+  UpdateJudgeBody,
   UpdateProjectBody,
+  UpdatePromptBody,
   UpdateProviderBody,
   UpdateSettingsBody,
 } from '@promptimize/shared'
@@ -59,8 +77,56 @@ export const projectsApi = {
   },
 }
 
+export const inputsApi = {
+  list: async (projectId: number): Promise<Input[]> =>
+    inputSchema.array().parse(await request('GET', `/v1/projects/${projectId}/inputs`)),
+  create: async (projectId: number, body: CreateInputBody): Promise<Input> =>
+    inputSchema.parse(await request('POST', `/v1/projects/${projectId}/inputs`, body)),
+  update: async (id: number, body: UpdateInputBody): Promise<Input> =>
+    inputSchema.parse(await request('PATCH', `/v1/inputs/${id}`, body)),
+  remove: async (id: number): Promise<void> => {
+    await request('DELETE', `/v1/inputs/${id}`)
+  },
+}
+
+export const promptsApi = {
+  list: async (projectId: number): Promise<Prompt[]> =>
+    promptSchema.array().parse(await request('GET', `/v1/projects/${projectId}/prompts`)),
+  create: async (projectId: number, body: CreatePromptBody): Promise<Prompt> =>
+    promptSchema.parse(await request('POST', `/v1/projects/${projectId}/prompts`, body)),
+  update: async (id: number, body: UpdatePromptBody): Promise<Prompt> =>
+    promptSchema.parse(await request('PATCH', `/v1/prompts/${id}`, body)),
+  remove: async (id: number): Promise<void> => {
+    await request('DELETE', `/v1/prompts/${id}`)
+  },
+}
+
+export const judgesApi = {
+  list: async (projectId: number): Promise<Judge[]> =>
+    judgeSchema.array().parse(await request('GET', `/v1/projects/${projectId}/judges`)),
+  create: async (projectId: number, body: CreateJudgeBody): Promise<Judge> =>
+    judgeSchema.parse(await request('POST', `/v1/projects/${projectId}/judges`, body)),
+  update: async (id: number, body: UpdateJudgeBody): Promise<Judge> =>
+    judgeSchema.parse(await request('PATCH', `/v1/judges/${id}`, body)),
+  remove: async (id: number): Promise<void> => {
+    await request('DELETE', `/v1/judges/${id}`)
+  },
+}
+
+export const experimentsApi = {
+  list: async (projectId: number): Promise<Experiment[]> =>
+    experimentSchema.array().parse(await request('GET', `/v1/projects/${projectId}/experiments`)),
+  create: async (projectId: number, body: CreateExperimentBody): Promise<Experiment> =>
+    experimentSchema.parse(await request('POST', `/v1/projects/${projectId}/experiments`, body)),
+  update: async (id: number, body: UpdateExperimentBody): Promise<Experiment> =>
+    experimentSchema.parse(await request('PATCH', `/v1/experiments/${id}`, body)),
+  remove: async (id: number): Promise<void> => {
+    await request('DELETE', `/v1/experiments/${id}`)
+  },
+}
+
 export const settingsApi = {
-  get: async (): Promise<SettingsResponse> => (await request('GET', '/v1/settings')) as SettingsResponse,
+  get: async (): Promise<Settings> => (await request('GET', '/v1/settings')) as Settings,
   update: async (body: UpdateSettingsBody): Promise<{ defaultOptimizerModel: string }> =>
     (await request('PATCH', '/v1/settings', body)) as { defaultOptimizerModel: string },
   addProvider: async (body: CreateProviderBody): Promise<SafeProvider> =>

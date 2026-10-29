@@ -20,3 +20,8 @@ export function timeAgo(ts: number): string {
   if (h < 24) return `${h} h ago`
   return `${Math.round(h / 24)} d ago`
 }
+
+/** A readable message from anything thrown at the UI (ApiError, Error, string). */
+export function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}

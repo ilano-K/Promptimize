@@ -1,17 +1,19 @@
-// Shared domain types. These mirror the logical schema in docs/TECHNICAL.md so the
-// prototype can later be wired to the real server without reshaping data.
+// Shared domain types. These mirror the logical schema in docs/TECHNICAL.md.
+// The server owns projects, the library and experiments; the shapes below are
+// the web-facing versions (string ids and numeric timestamps) used by the
+// prototype screens, with runs/loops still simulated in the browser.
 
 export type Label = 'train' | 'validation' | 'test'
 export type CharType = 'text' | 'number'
 export type JudgeMode = 'individual' | 'batch'
 
 // Projects live on the server (SQLite), so their shape comes from the shared package.
-// The other objects below are still prototype data held in the browser.
 export type { Project } from '@promptimize/shared'
 
 export interface Input {
   id: string
   projectId: string
+  /** Shown as the input's name; stored in the server's `description` column. */
   name: string
   content: string
   label: Label
@@ -47,9 +49,9 @@ export interface Experiment {
   id: string
   projectId: string
   name: string
-  promptId: string
+  promptId: string | null // null = the prompt was deleted
   inputIds: string[]
-  judgeId: string | null // null = prompt-only mode
+  judgeId: string | null // null = the judge was deleted
   createdAt: number
 }
 
