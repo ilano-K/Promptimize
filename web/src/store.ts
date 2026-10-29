@@ -1,14 +1,28 @@
-// All app state lives here. In the real app the server owns this data and the
-// browser polls it; in the prototype the store plays the server's role and the
-// "model calls" come from sim.ts. State is saved to localStorage so a reload
-// keeps your work (runs in flight on reload are marked as stopped, like a
-// server restart marks them "interrupted").
+// All app state lives here. Projects, their library objects and experiments come
+// from the server; runs and optimize loops are still simulated in the browser
+// (the "model calls" come from sim.ts) and saved to localStorage so a reload
+// keeps them (runs in flight on reload are marked as stopped, like a server
+// restart marks them "interrupted").
 
 import type { CreateProjectBody, CreateProviderBody, UpdateProjectBody, UpdateProviderBody } from '@promptimize/shared'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
-import { projectsApi, settingsApi } from './api'
+import { experimentsApi, inputsApi, judgesApi, projectsApi, promptsApi, settingsApi } from './api'
+import {
+  experimentFromApi,
+  experimentToCreate,
+  experimentToUpdate,
+  inputFromApi,
+  inputToCreate,
+  inputToUpdate,
+  judgeFromApi,
+  judgeToCreate,
+  judgeToUpdate,
+  promptFromApi,
+  promptToCreate,
+  promptToUpdate,
+} from './mappers'
 import { snapshotProviders } from './providers'
 import * as seed from './seed'
 import { batchJudgeFails, generateOutput, goodEnough, judgeOutput, optimizePrompt, roundNote, sleep } from './sim'
@@ -32,12 +46,14 @@ interface Data {
   projects: Project[]
   projectsStatus: 'loading' | 'ready' | 'error'
   projectsError?: string
-  /** The open project's id as a string (the library and experiments still key on strings). */
+  /** The open project's id as a string (the library and experiments key on strings). */
   projectId: string
+  /** Library objects and experiments come from the server. Every project's set is loaded. */
   inputs: Input[]
   prompts: Prompt[]
   judges: Judge[]
   experiments: Experiment[]
+  /** Runs and optimize loops are simulated here and saved in localStorage. */
   runs: Run[]
   loops: OptimizeLoop[]
   settings: Settings
@@ -58,20 +74,20 @@ interface Actions {
   createProject: (body: CreateProjectBody) => Promise<Project>
   updateProject: (id: number, body: UpdateProjectBody) => Promise<Project>
   deleteProject: (id: number) => Promise<void>
-  saveInput: (i: Input) => void
-  savePrompt: (p: Prompt) => void
-  saveJudge: (j: Judge) => void
-  deleteObject: (kind: 'input' | 'prompt' | 'judge', id: string) => void
-  saveExperiment: (e: Experiment) => void
-  deleteExperiment: (id: string) => void
+  saveInput: (i: Input) => Promise<Input>
+  savePrompt: (p: Prompt) => Promise<Prompt>
+  saveJudge: (j: Judge) => Promise<Judge>
+  deleteObject: (kind: 'input' | 'prompt' | 'judge', id: string) => Promise<void>
+  saveExperiment: (e: Experiment) => Promise<Experiment>
+  deleteExperiment: (id: string) => Promise<void>
   startRun: (experimentId: string) => string
   retryJudge: (runId: string) => void
   stopRun: (runId: string) => void
   startOptimize: (experimentId: string, cfg: OptimizeConfig) => string
   stopLoop: (loopId: string) => void
   runTest: (loopId: string, round: number) => void
-  saveRoundPrompt: (loopId: string, round: number, name: string) => string
-  experimentFromRound: (loopId: string, round: number, name: string) => string
+  saveRoundPrompt: (loopId: string, round: number, name: string) => Promise<Prompt>
+  experimentFromRound: (loopId: string, round: number, name: string) => Promise<Experiment>
   updateSettings: (patch: Partial<Settings>) => Promise<void>
   /** Providers live on the server. These call the API, then mirror the response into the store. */
   loadSettings: () => Promise<void>
@@ -85,11 +101,11 @@ const initial = (): Data => ({
   projects: [],
   projectsStatus: 'loading',
   projectId: '',
-  inputs: seed.inputs,
-  prompts: seed.prompts,
-  judges: seed.judges,
-  experiments: seed.experiments,
-  runs: seed.runs,
+  inputs: [],
+  prompts: [],
+  judges: [],
+  experiments: [],
+  runs: [],
   loops: [],
   settings: seed.settings,
 })
@@ -180,9 +196,15 @@ export const useStore = create<Data & Actions>()(
         opts: { promptText?: string; promptName?: string; labels?: Input['label'][]; loopId?: string; round?: number; kind?: Run['kind'] } = {},
       ): string {
         const s = get()
-        const e = s.experiments.find((x) => x.id === experimentId)!
-        const prompt = s.prompts.find((p) => p.id === e.promptId)!
-        const judge = e.judgeId ? s.judges.find((j) => j.id === e.judgeId) ?? null : null
+        const e = s.experiments.find((x) => x.id === experimentId)
+        if (!e) throw new Error('Experiment not found.')
+        // A deleted prompt/judge leaves the reference null; the experiment can't run until one is picked.
+        if (!e.promptId) throw new Error('This experiment has no prompt. Pick one before running.')
+        if (!e.judgeId) throw new Error('This experiment has no judge. Pick one before running.')
+        const prompt = s.prompts.find((p) => p.id === e.promptId)
+        const judge = s.judges.find((j) => j.id === e.judgeId) ?? null
+        if (!prompt) throw new Error('The prompt for this experiment is missing. Pick one before running.')
+        if (!judge) throw new Error('The judge for this experiment is missing. Pick one before running.')
         let ins = s.inputs.filter((i) => e.inputIds.includes(i.id))
         if (opts.labels) ins = ins.filter((i) => opts.labels!.includes(i.label))
         const run: Run = {
@@ -265,7 +287,28 @@ export const useStore = create<Data & Actions>()(
         loadProjects: async () => {
           set({ projectsStatus: 'loading', projectsError: undefined })
           try {
-            set({ projects: await projectsApi.list(), projectsStatus: 'ready' })
+            const projects = await projectsApi.list()
+            // Load every project's library and experiments too: the Projects
+            // screen shows counts for all of them, and switching projects is instant.
+            const bundles = await Promise.all(
+              projects.map(async (p) => {
+                const [inputs, prompts, judges, experiments] = await Promise.all([
+                  inputsApi.list(p.id),
+                  promptsApi.list(p.id),
+                  judgesApi.list(p.id),
+                  experimentsApi.list(p.id),
+                ])
+                return { inputs, prompts, judges, experiments }
+              }),
+            )
+            set({
+              projects,
+              projectsStatus: 'ready',
+              inputs: bundles.flatMap((b) => b.inputs.map(inputFromApi)),
+              prompts: bundles.flatMap((b) => b.prompts.map(promptFromApi)),
+              judges: bundles.flatMap((b) => b.judges.map(judgeFromApi)),
+              experiments: bundles.flatMap((b) => b.experiments.map(experimentFromApi)),
+            })
           } catch (e) {
             set({ projectsStatus: 'error', projectsError: e instanceof Error ? e.message : String(e) })
           }
@@ -300,25 +343,69 @@ export const useStore = create<Data & Actions>()(
           })
         },
 
-        saveInput: (i) => set((s) => ({ inputs: upsert(s.inputs, i) })),
-        savePrompt: (p) => set((s) => ({ prompts: upsert(s.prompts, p) })),
-        saveJudge: (j) => set((s) => ({ judges: upsert(s.judges, j) })),
-        deleteObject: (kind, id) =>
-          set((s) =>
-            kind === 'input'
-              ? { inputs: s.inputs.filter((x) => x.id !== id) }
-              : kind === 'prompt'
-                ? { prompts: s.prompts.filter((x) => x.id !== id) }
-                : { judges: s.judges.filter((x) => x.id !== id) },
-          ),
+        saveInput: async (i) => {
+          const saved = i.id
+            ? inputFromApi(await inputsApi.update(Number(i.id), inputToUpdate(i)))
+            : inputFromApi(await inputsApi.create(Number(i.projectId), inputToCreate(i)))
+          set((s) => ({ inputs: upsert(s.inputs, saved) }))
+          return saved
+        },
+        savePrompt: async (p) => {
+          const saved = p.id
+            ? promptFromApi(await promptsApi.update(Number(p.id), promptToUpdate(p)))
+            : promptFromApi(await promptsApi.create(Number(p.projectId), promptToCreate(p)))
+          set((s) => ({ prompts: upsert(s.prompts, saved) }))
+          return saved
+        },
+        saveJudge: async (j) => {
+          const saved = j.id
+            ? judgeFromApi(await judgesApi.update(Number(j.id), judgeToUpdate(j)))
+            : judgeFromApi(await judgesApi.create(Number(j.projectId), judgeToCreate(j)))
+          set((s) => ({ judges: upsert(s.judges, saved) }))
+          return saved
+        },
+        deleteObject: async (kind, id) => {
+          if (kind === 'input') {
+            await inputsApi.remove(Number(id))
+            set((s) => ({
+              inputs: s.inputs.filter((x) => x.id !== id),
+              // The join rows cascade on the server; mirror that here.
+              experiments: s.experiments.map((e) =>
+                e.inputIds.includes(id) ? { ...e, inputIds: e.inputIds.filter((x) => x !== id) } : e,
+              ),
+            }))
+            return
+          }
+          if (kind === 'prompt') {
+            await promptsApi.remove(Number(id))
+            set((s) => ({
+              prompts: s.prompts.filter((x) => x.id !== id),
+              experiments: s.experiments.map((e) => (e.promptId === id ? { ...e, promptId: null } : e)),
+            }))
+            return
+          }
+          await judgesApi.remove(Number(id))
+          set((s) => ({
+            judges: s.judges.filter((x) => x.id !== id),
+            experiments: s.experiments.map((e) => (e.judgeId === id ? { ...e, judgeId: null } : e)),
+          }))
+        },
 
-        saveExperiment: (e) => set((s) => ({ experiments: upsert(s.experiments, e) })),
-        deleteExperiment: (id) =>
+        saveExperiment: async (e) => {
+          const saved = e.id
+            ? experimentFromApi(await experimentsApi.update(Number(e.id), experimentToUpdate(e)))
+            : experimentFromApi(await experimentsApi.create(Number(e.projectId), experimentToCreate(e)))
+          set((s) => ({ experiments: upsert(s.experiments, saved) }))
+          return saved
+        },
+        deleteExperiment: async (id) => {
+          await experimentsApi.remove(Number(id))
           set((s) => ({
             experiments: s.experiments.filter((x) => x.id !== id),
             runs: s.runs.filter((r) => r.experimentId !== id),
             loops: s.loops.filter((l) => l.experimentId !== id),
-          })),
+          }))
+        },
 
         startRun: (experimentId) => {
           const id = createRun(experimentId)
@@ -337,6 +424,8 @@ export const useStore = create<Data & Actions>()(
         },
 
         startOptimize: (experimentId, cfg) => {
+          const e = get().experiments.find((x) => x.id === experimentId)
+          if (!e?.promptId || !e.judgeId) throw new Error('This experiment needs a prompt and a judge before it can optimize.')
           const l: OptimizeLoop = { id: uid(), experimentId, ...cfg, status: 'running', rounds: [], startedAt: Date.now() }
           set((s) => ({ loops: [...s.loops, l] }))
           void optimizeLoop(l.id)
@@ -362,23 +451,21 @@ export const useStore = create<Data & Actions>()(
           void execute(runId)
         },
 
-        saveRoundPrompt: (loopId, round, name) => {
+        saveRoundPrompt: async (loopId, round, name) => {
           const s = get()
           const l = s.loops.find((x) => x.id === loopId)!
           const e = s.experiments.find((x) => x.id === l.experimentId)!
-          const base = s.prompts.find((p) => p.id === e.promptId)!
+          const base = e.promptId ? s.prompts.find((p) => p.id === e.promptId) : undefined
+          if (!base) throw new Error('This experiment has no prompt to copy.')
           const r = l.rounds.find((x) => x.index === round)!
-          const p: Prompt = { ...base, id: uid(), name, text: r.promptText }
-          set((st) => ({ prompts: [...st.prompts, p] }))
-          return p.id
+          return get().savePrompt({ ...base, id: '', name, text: r.promptText })
         },
-        experimentFromRound: (loopId, round, name) => {
-          const promptId = get().saveRoundPrompt(loopId, round, name)
-          const l = get().loops.find((x) => x.id === loopId)!
-          const orig = get().experiments.find((x) => x.id === l.experimentId)!
-          const e: Experiment = { ...orig, id: uid(), name, promptId, createdAt: Date.now() }
-          set((s) => ({ experiments: [...s.experiments, e] }))
-          return e.id
+        experimentFromRound: async (loopId, round, name) => {
+          const prompt = await get().saveRoundPrompt(loopId, round, name)
+          const s = get()
+          const l = s.loops.find((x) => x.id === loopId)!
+          const orig = s.experiments.find((x) => x.id === l.experimentId)!
+          return get().saveExperiment({ ...orig, id: '', name, promptId: prompt.id, createdAt: Date.now() })
         },
 
         // The server owns settings. On load we overwrite the cached copy; if the
@@ -412,24 +499,32 @@ export const useStore = create<Data & Actions>()(
             await settingsApi.update(patch)
           } catch {}
         },
-        // Projects are real data on the server, so a demo reset leaves them alone.
-        resetDemo: () => {
-          const { projects, projectsStatus, projectsError, projectId } = get()
-          set({ ...initial(), projects, projectsStatus, projectsError, projectId })
-        },
+        // Projects, the library and experiments live on the server. Only the
+        // simulated runs and loops are stored in this browser.
+        resetDemo: () => set({ runs: [], loops: [] }),
       }
     },
     {
       name: 'promptimize-prototype',
-      version: 3,
+      version: 4,
       // v2 changed the provider shape (kind, models, base URL); older saves get the example providers.
       // v3 moved projects to the server; the old browser copies (string ids) are dropped.
+      // v4 moved the library and experiments to the server; the seed-backed copies and
+      // the runs that snapshotted them are dropped. Runs/loops are still saved here.
       migrate: (state, version) => {
         const s = state as Data
         if (version < 2) s.settings = seed.settings
         if (version < 3) {
           delete (s as Partial<Data>).projects
           s.projectId = ''
+        }
+        if (version < 4) {
+          delete (s as Partial<Data>).inputs
+          delete (s as Partial<Data>).prompts
+          delete (s as Partial<Data>).judges
+          delete (s as Partial<Data>).experiments
+          s.runs = []
+          s.loops = []
         }
         return s
       },
@@ -444,10 +539,6 @@ export const useStore = create<Data & Actions>()(
       },
       partialize: (s) => ({
         projectId: s.projectId,
-        inputs: s.inputs,
-        prompts: s.prompts,
-        judges: s.judges,
-        experiments: s.experiments,
         runs: s.runs,
         loops: s.loops,
         settings: s.settings,
