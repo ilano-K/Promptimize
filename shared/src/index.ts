@@ -7,5 +7,6 @@ export * from "./settings.js";
 export * from "./prompts.js";
 export * from "./inputs.js";
 export * from "./judges.js";
+export * from "./experiments.js";
 
 export type Health = { ok: true };
