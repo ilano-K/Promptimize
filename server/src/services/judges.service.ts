@@ -8,11 +8,11 @@ import { judges } from "../db/schemas";
 import { desc, eq } from "drizzle-orm";
 import { translateDbError, type DomainErrorsByCode } from "../db/errors";
 import { DuplicateNameError, NotFoundError } from "../errors/domain";
-import { getProject } from "./projects.service";
+import { readProject } from "./projects.service";
 import { assertModelConfigured } from "../llm/models";
 
 export function listJudges(projectId: number): Judge[] {
-  getProject(projectId);
+  readProject(projectId);
   const rows = db
     .select()
     .from(judges)
@@ -24,7 +24,7 @@ export function listJudges(projectId: number): Judge[] {
 }
 
 export function createJudge(projectId: number, data: CreateJudgeBody): Judge {
-  getProject(projectId);
+  readProject(projectId);
   assertModelConfigured(data.model);
   const map: DomainErrorsByCode = data.name
     ? { DUPLICATE_NAME: new DuplicateNameError("judge", data.name) }
@@ -40,7 +40,7 @@ export function createJudge(projectId: number, data: CreateJudgeBody): Judge {
   }
 }
 
-export function getJudge(id: number) {
+export function readJudge(id: number) {
   const [judge] = db.select().from(judges).where(eq(judges.id, id)).all();
   if (!judge) {
     throw new NotFoundError("judge", id);
@@ -75,6 +75,6 @@ export function updateJudge(id: number, data: UpdateJudgeBody): Judge {
 }
 
 export function deleteJudge(id: number): void {
-  getJudge(id);
+  readJudge(id);
   db.delete(judges).where(eq(judges.id, id)).run();
 }

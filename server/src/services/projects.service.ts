@@ -29,7 +29,7 @@ export function createProject(data: CreateProjectBody): Project {
 }
 
 // Get project
-export function getProject(id: number): Project {
+export function readProject(id: number): Project {
   const project = db.select().from(projects).where(eq(projects.id, id)).get();
   if (!project) {
     throw new NotFoundError("project", id);
@@ -63,6 +63,6 @@ export function updateProject(id: number, data: UpdateProjectBody): Project {
 
 // DELETE project
 export function deleteProject(id: number): void {
-  getProject(id);
+  readProject(id);
   db.delete(projects).where(eq(projects.id, id)).run();
 }

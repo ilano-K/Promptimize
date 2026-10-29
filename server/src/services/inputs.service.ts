@@ -7,11 +7,11 @@ import type {
   UpdateInputBody,
 } from "@promptimize/shared";
 import { NotFoundError } from "../errors/domain";
-import { getProject } from "./projects.service";
+import { readProject } from "./projects.service";
 
 // LIST inputs
 export function listInputs(projectId: number): Input[] {
-  getProject(projectId);
+  readProject(projectId);
   return db
     .select()
     .from(inputs)
@@ -22,7 +22,7 @@ export function listInputs(projectId: number): Input[] {
 
 // CREATE input
 export function createInput(projectId: number, data: CreateInputBody): Input {
-  getProject(projectId);
+  readProject(projectId);
 
   const formattedData = { ...data, projectId: projectId };
   const [input] = db.insert(inputs).values(formattedData).returning().all();

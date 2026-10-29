@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { parseId } from "../lib/parse-id";
 import {
   deletePrompt,
-  getPrompt,
+  readPrompt,
   updatePrompt,
 } from "../services/prompts.service";
 import { validateJson } from "../lib/validate";
@@ -13,7 +13,7 @@ export const promptsRoutes = new Hono();
 // GET prompt
 promptsRoutes.get("/:id", (c) => {
   const id = parseId(c.req.param("id"), "prompt");
-  const prompt = getPrompt(id);
+  const prompt = readPrompt(id);
   return c.json(prompt, 200);
 });
 

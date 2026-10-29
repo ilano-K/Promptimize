@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { prompts } from "../db/schemas";
 import { DuplicateNameError, NotFoundError } from "../errors/domain";
-import { getProject } from "./projects.service";
+import { readProject } from "./projects.service";
 import { assertModelConfigured } from "../llm/models";
 import { translateDbError, type DomainErrorsByCode } from "../db/errors";
 import type {
@@ -13,7 +13,7 @@ import type {
 
 // LIST prompts
 export function listPrompts(projectId: number): Prompt[] {
-  getProject(projectId);
+  readProject(projectId);
   const rows = db
     .select()
     .from(prompts)
@@ -28,7 +28,7 @@ export function createPrompt(
   projectId: number,
   data: CreatePromptBody,
 ): Prompt {
-  getProject(projectId);
+  readProject(projectId);
   assertModelConfigured(data.model);
   const map: DomainErrorsByCode = {
     DUPLICATE_NAME: new DuplicateNameError("prompt", data.name),
@@ -43,7 +43,7 @@ export function createPrompt(
 }
 
 // GET prompt
-export function getPrompt(id: number): Prompt {
+export function readPrompt(id: number): Prompt {
   const prompt = db.select().from(prompts).where(eq(prompts.id, id)).get();
 
   if (!prompt) {
@@ -77,6 +77,6 @@ export function updatePrompt(id: number, data: UpdatePromptBody): Prompt {
 }
 
 export function deletePrompt(id: number): void {
-  getPrompt(id);
+  readPrompt(id);
   db.delete(prompts).where(eq(prompts.id, id)).run();
 }

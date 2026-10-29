@@ -11,7 +11,7 @@ import {
 import {
   createProject,
   deleteProject,
-  getProject,
+  readProject,
   listProjects,
   updateProject,
 } from "../services/projects.service";
@@ -42,7 +42,7 @@ projectRoutes.post("/", validateJson(createProjectBody), async (c) => {
 // GET a project
 projectRoutes.get("/:id", async (c) => {
   const id = parseId(c.req.param("id"), "project");
-  const project = getProject(id);
+  const project = readProject(id);
   return c.json(project, 200);
 });
 

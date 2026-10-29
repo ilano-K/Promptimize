@@ -8,9 +8,9 @@ import { db } from "../db";
 import { experiment_inputs, experiments } from "../db/schemas/experiments";
 import { desc, eq, inArray } from "drizzle-orm";
 import { NotFoundError } from "../errors/domain";
-import { getProject } from "./projects.service";
-import { getPrompt } from "./prompts.service";
-import { getJudge } from "./judges.service";
+import { readProject } from "./projects.service";
+import { readPrompt } from "./prompts.service";
+import { readJudge } from "./judges.service";
 import { readInput } from "./inputs.service";
 
 // helper to get linked ids
@@ -76,7 +76,7 @@ function assertInProject(
 
 // LIST experiments
 export function listExperiments(projectId: number): Experiment[] {
-  getProject(projectId);
+  readProject(projectId);
   const rows = db
     .select()
     .from(experiments)
@@ -94,9 +94,14 @@ export function createExperiment(
   projectId: number,
   data: CreateExperimentBody,
 ): Experiment {
-  getProject(projectId);
-  assertInProject(getPrompt(data.promptId), projectId, "prompt", data.promptId);
-  assertInProject(getJudge(data.judgeId), projectId, "judge", data.judgeId);
+  readProject(projectId);
+  assertInProject(
+    readPrompt(data.promptId),
+    projectId,
+    "prompt",
+    data.promptId,
+  );
+  assertInProject(readJudge(data.judgeId), projectId, "judge", data.judgeId);
 
   // inputIds live in the join table; de-dupe because its composite PK rejects
   // repeated (experiment, input) pairs
@@ -152,11 +157,16 @@ export function editExperiment(
   const { projectId } = existing;
 
   if (data.promptId !== undefined) {
-    assertInProject(getPrompt(data.promptId), projectId, "prompt", data.promptId);
+    assertInProject(
+      readPrompt(data.promptId),
+      projectId,
+      "prompt",
+      data.promptId,
+    );
   }
 
   if (data.judgeId !== undefined) {
-    assertInProject(getJudge(data.judgeId), projectId, "judge", data.judgeId);
+    assertInProject(readJudge(data.judgeId), projectId, "judge", data.judgeId);
   }
 
   // inputIds are stored in the join table, not on the experiments row; de-dupe
