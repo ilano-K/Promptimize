@@ -8,6 +8,7 @@ import {
   settingsRoutes,
   inputRoutes,
   judgesRoutes,
+  experimentsRoutes,
 } from "./routes";
 
 export const app = new Hono();
@@ -22,5 +23,6 @@ app.route("/api/v1/settings", settingsRoutes);
 app.route("/api/v1/prompts", promptsRoutes);
 app.route("/api/v1/inputs", inputRoutes);
 app.route("/api/v1/judges", judgesRoutes);
+app.route("/api/v1/experiments", experimentsRoutes);
 
 app.get("/api/health", (c) => c.json<Health>({ ok: true }));

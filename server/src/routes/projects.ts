@@ -5,6 +5,7 @@ import {
   createJudgeBody,
   createProjectBody,
   createPromptBody,
+  createExperimentBody,
   updateProjectBody,
 } from "@promptimize/shared";
 import {
@@ -18,6 +19,10 @@ import { createPrompt, listPrompts } from "../services/prompts.service";
 import { parseId } from "../lib/parse-id";
 import { createInput, listInputs } from "../services/inputs.service";
 import { createJudge, listJudges } from "../services/judges.service";
+import {
+  createExperiment,
+  listExperiments,
+} from "../services/experiments.service";
 
 export const projectRoutes = new Hono();
 
@@ -112,3 +117,24 @@ projectRoutes.post("/:id/judges", validateJson(createJudgeBody), (c) => {
   const judge = createJudge(projectId, data);
   return c.json(judge, 201);
 });
+
+// ======== EXPERIMENTS IN A PROJECT ===========
+
+// LIST experiments
+projectRoutes.get("/:id/experiments", (c) => {
+  const projectId = parseId(c.req.param("id"), "project");
+  const rows = listExperiments(projectId);
+  return c.json(rows, 200);
+});
+
+// CREATE experiment
+projectRoutes.post(
+  "/:id/experiments",
+  validateJson(createExperimentBody),
+  (c) => {
+    const projectId = parseId(c.req.param("id"), "project");
+    const data = c.req.valid("json");
+    const experiment = createExperiment(projectId, data);
+    return c.json(experiment, 201);
+  },
+);
