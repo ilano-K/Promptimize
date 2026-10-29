@@ -1,5 +1,9 @@
 import { Hono } from "hono";
-import { deleteInput, getInput, updateInput } from "../services/inputs.service";
+import {
+  deleteInput,
+  readInput,
+  updateInput,
+} from "../services/inputs.service";
 import { validateJson } from "../lib/validate";
 import { updateInputBody } from "@promptimize/shared";
 import { parseId } from "../lib/parse-id";
@@ -8,7 +12,7 @@ export const inputRoutes = new Hono();
 
 inputRoutes.get("/:id", (c) => {
   const id = parseId(c.req.param("id"), "input");
-  const input = getInput(id);
+  const input = readInput(id);
   return c.json(input, 200);
 });
 

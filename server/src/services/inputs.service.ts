@@ -29,8 +29,8 @@ export function createInput(projectId: number, data: CreateInputBody): Input {
   return input;
 }
 
-// GET input
-export function getInput(id: number): Input {
+// READ input
+export function readInput(id: number): Input {
   const input = db.select().from(inputs).where(eq(inputs.id, id)).get();
   if (!input) {
     throw new NotFoundError("input", id);
@@ -54,6 +54,6 @@ export function updateInput(id: number, data: UpdateInputBody): Input {
 }
 
 export function deleteInput(id: number): void {
-  getInput(id);
+  readInput(id);
   db.delete(inputs).where(eq(inputs.id, id)).run();
 }
