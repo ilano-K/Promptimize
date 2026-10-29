@@ -2,6 +2,7 @@ import { ArrowLeft, FloppyDisk, Flask, Info, Sparkle, Stop, TestTube, WarningCir
 import { diffLines } from 'diff'
 import { useState } from 'react'
 import { Button, Empty, Field, inputCls, LabelTag, Modal, PageHeader, Panel, Score, Tag, Tip } from '../components/ui'
+import { errorMessage } from '../components/ui.helpers'
 import { go } from '../router'
 import { averagesFor, useStoreShallow } from '../store'
 import type { OptimizeLoop, Run } from '../types'
@@ -247,6 +248,7 @@ function TestTab({ loop, round, testRun }: { loop: OptimizeLoop; round: number; 
   const s = useStoreShallow((st) => ({ experiments: st.experiments, inputs: st.inputs, runTest: st.runTest }))
   const e = s.experiments.find((x) => x.id === loop.experimentId)!
   const tests = s.inputs.filter((i) => e.inputIds.includes(i.id) && i.label === 'test')
+  const runnable = Boolean(e.promptId && e.judgeId)
   if (testRun) return <RunView run={testRun} compact />
   const tested = loop.rounds.filter((r) => r.testRunId).map((r) => (r.index === 0 ? 'Original' : `round ${r.index}`))
   return (
@@ -262,7 +264,7 @@ function TestTab({ loop, round, testRun }: { loop: OptimizeLoop; round: number; 
         tests.length ? (
           <div className="flex flex-col items-center gap-2">
             <Tip text="Testing every round and picking the best test score would turn test into a second validation set.">
-              <Button variant="primary" disabled={loop.status === 'running'} onClick={() => s.runTest(loop.id, round)}>
+              <Button variant="primary" disabled={loop.status === 'running' || !runnable} onClick={() => s.runTest(loop.id, round)}>
                 <TestTube size={15} /> Run test set
               </Button>
             </Tip>
@@ -280,6 +282,8 @@ function SaveRound({ loop, round, kind, onClose }: { loop: OptimizeLoop; round: 
   const base = s.prompts.find((p) => p.id === e.promptId)
   const [name, setName] = useState(kind === 'prompt' ? `${base?.name ?? 'prompt'} v${round + 1}` : `${e.name}, round ${round}`)
   const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   return (
     <Modal
       title={kind === 'prompt' ? 'Save round as prompt' : 'Create experiment with this prompt'}
@@ -301,19 +305,29 @@ function SaveRound({ loop, round, kind, onClose }: { loop: OptimizeLoop; round: 
             </Button>
             <Button
               variant="primary"
-              disabled={!name.trim()}
+              disabled={!name.trim() || busy}
               onClick={() => {
-                if (kind === 'prompt') {
-                  s.saveRoundPrompt(loop.id, round, name.trim())
-                  setSaved(true)
-                } else {
-                  const id = s.experimentFromRound(loop.id, round, name.trim())
-                  onClose()
-                  go(`experiments/${id}`)
-                }
+                setBusy(true)
+                setSaveError(null)
+                void (async () => {
+                  try {
+                    if (kind === 'prompt') {
+                      await s.saveRoundPrompt(loop.id, round, name.trim())
+                      setBusy(false)
+                      setSaved(true)
+                    } else {
+                      const created = await s.experimentFromRound(loop.id, round, name.trim())
+                      onClose()
+                      go(`experiments/${created.id}`)
+                    }
+                  } catch (e) {
+                    setSaveError(errorMessage(e))
+                    setBusy(false)
+                  }
+                })()
               }}
             >
-              {kind === 'prompt' ? 'Save prompt' : 'Create experiment'}
+              {busy ? 'Saving…' : kind === 'prompt' ? 'Save prompt' : 'Create experiment'}
             </Button>
           </>
         )
@@ -329,6 +343,11 @@ function SaveRound({ loop, round, kind, onClose }: { loop: OptimizeLoop; round: 
               ? `Saves round ${round}'s text as a new prompt (model: ${base?.model}).`
               : `Saves round ${round}'s prompt to the library and makes a new experiment with the same inputs and judge as "${e.name}".`}
           </p>
+          {saveError && (
+            <p role="alert" className="text-sm text-danger">
+              {saveError}
+            </p>
+          )}
         </div>
       )}
     </Modal>

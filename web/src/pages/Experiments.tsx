@@ -2,10 +2,10 @@ import { Flask, Plus } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { InputEditor, JudgeEditor, PromptEditor } from '../components/editors'
 import { Button, Empty, Field, inputCls, LabelTag, Modal, PageHeader, Score, Tag } from '../components/ui'
-import { timeAgo } from '../components/ui.helpers'
+import { errorMessage, timeAgo } from '../components/ui.helpers'
 import { Select } from '../components/Select'
 import { go } from '../router'
-import { averages, latestRun, uid, useStoreShallow } from '../store'
+import { averages, latestRun, useStoreShallow } from '../store'
 import type { Experiment, Label } from '../types'
 import { RunStatusTag } from './Experiment'
 
@@ -61,11 +61,12 @@ export function Experiments() {
                   <div className="min-w-0">
                     <p className="font-medium">{e.name}</p>
                     <p className="mt-1 truncate font-mono text-xs text-fg-3">
-                      {prompt?.name ?? 'missing prompt'} on {prompt?.model}
+                      {prompt ? `${prompt.name} on ${prompt.model}` : 'missing prompt'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-fg-2">
-                    {judge ? <span>{judge.name}</span> : <Tag>Prompt-only</Tag>}
+                    {!prompt && <Tag tone="warn">Missing prompt</Tag>}
+                    {judge ? <span>{judge.name}</span> : <Tag tone="warn">Missing judge</Tag>}
                     <span className="text-fg-3">with {e.inputIds.length} inputs</span>
                     {loops > 0 && <Tag tone="accent">{loops} optimize loop{loops > 1 ? 's' : ''}</Tag>}
                   </div>
@@ -114,17 +115,31 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
   const [v, setV] = useState<Experiment>(
     () =>
       initial ?? {
-        id: uid(),
+        id: '',
         projectId: s.projectId,
         name: '',
-        promptId: prompts[0]?.id ?? '',
+        promptId: prompts[0]?.id ?? null,
         judgeId: judges[0]?.id ?? null,
         inputIds: inputs.map((i) => i.id),
         createdAt: Date.now(),
       },
   )
+  const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [inline, setInline] = useState<'prompt' | 'judge' | 'input' | null>(null)
-  const ok = v.name.trim() && v.promptId && v.inputIds.length > 0
+  const ok = v.name.trim() && v.promptId && v.judgeId && v.inputIds.length > 0 && !busy
+  const save = async () => {
+    setBusy(true)
+    setSaveError(null)
+    try {
+      const saved = await s.saveExperiment(v)
+      onClose()
+      if (!initial) go(`experiments/${saved.id}`)
+    } catch (e) {
+      setSaveError(errorMessage(e))
+      setBusy(false)
+    }
+  }
   const toggle = (id: string) => setV({ ...v, inputIds: v.inputIds.includes(id) ? v.inputIds.filter((x) => x !== id) : [...v.inputIds, id] })
   const selectLabel = (l: Label) => {
     const ids = inputs.filter((i) => i.label === l).map((i) => i.id)
@@ -146,13 +161,9 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
             <Button
               variant="primary"
               disabled={!ok}
-              onClick={() => {
-                s.saveExperiment(v)
-                onClose()
-                if (!initial) go(`experiments/${v.id}`)
-              }}
+              onClick={() => void save()}
             >
-              {initial ? 'Save' : 'Create experiment'}
+              {busy ? 'Saving…' : initial ? 'Save' : 'Create experiment'}
             </Button>
           </>
         }
@@ -168,8 +179,8 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
                     id={id}
                     className="flex-1"
                     mono
-                    value={v.promptId}
-                    onChange={(promptId) => setV({ ...v, promptId })}
+                    value={v.promptId ?? ''}
+                    onChange={(promptId) => setV({ ...v, promptId: promptId || null })}
                     placeholder="No prompts yet"
                     options={prompts.map((p) => ({ value: p.id, label: p.name, hint: p.model.split('/').slice(1).join('/') }))}
                   />
@@ -179,7 +190,7 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
                 </div>
               )}
             </Field>
-            <Field label="Judge" help={v.judgeId ? undefined : 'Prompt-only: see outputs without scores. Optimize needs a judge.'}>
+            <Field label="Judge" help="Every experiment needs a judge; it scores each output.">
               {(id) => (
                 <div className="flex gap-1.5">
                   <Select
@@ -187,10 +198,8 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
                     className="flex-1"
                     value={v.judgeId ?? ''}
                     onChange={(judgeId) => setV({ ...v, judgeId: judgeId || null })}
-                    options={[
-                      { value: '', label: 'No judge (prompt-only)' },
-                      ...judges.map((j) => ({ value: j.id, label: j.name, hint: `${j.characteristics.length} checks, ${j.mode}` })),
-                    ]}
+                    placeholder="No judges yet"
+                    options={judges.map((j) => ({ value: j.id, label: j.name, hint: `${j.characteristics.length} checks, ${j.mode}` }))}
                   />
                   <Button onClick={() => setInline('judge')} aria-label="Create judge">
                     <Plus size={15} />
@@ -234,6 +243,11 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
             )}
             {v.inputIds.length === 0 && <p className="mt-1.5 text-xs text-danger">Select at least one input.</p>}
           </div>
+          {saveError && (
+            <p role="alert" className="text-sm text-danger">
+              {saveError}
+            </p>
+          )}
         </div>
       </Modal>
 

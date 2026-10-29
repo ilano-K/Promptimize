@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { uid, useDefaultModel, usedBy, useStore } from '../store'
 import type { Characteristic, Input, Judge, Label, Prompt } from '../types'
 import { Button, Field, inputCls, ModelSelect, Modal, monoAreaCls, textareaCls } from './ui'
-import { labelHelp } from './ui.helpers'
+import { errorMessage, labelHelp } from './ui.helpers'
 
 type Kind = 'input' | 'prompt' | 'judge'
 
@@ -27,54 +27,85 @@ function UsedBy({ kind, id }: { kind: Kind; id?: string }) {
   )
 }
 
-function Footer({ onClose, onSave, onDelete, disabled }: { onClose: () => void; onSave: () => void; onDelete?: () => void; disabled?: boolean }) {
+function Footer({
+  onClose,
+  onSave,
+  onDelete,
+  disabled,
+  busy,
+}: {
+  onClose: () => void
+  onSave: () => void
+  onDelete?: () => void
+  disabled?: boolean
+  busy?: boolean
+}) {
   return (
     <>
       {onDelete && (
-        <Button variant="danger" className="mr-auto" onClick={onDelete}>
+        <Button variant="danger" className="mr-auto" onClick={onDelete} disabled={busy}>
           <Trash size={15} /> Delete
         </Button>
       )}
       <Button variant="ghost" onClick={onClose}>
         Cancel
       </Button>
-      <Button variant="primary" onClick={onSave} disabled={disabled}>
-        Save to library
+      <Button variant="primary" onClick={onSave} disabled={disabled || busy}>
+        {busy ? 'Saving…' : 'Save to library'}
       </Button>
     </>
   )
 }
 
-function useDelete(kind: Kind, id: string | undefined, onClose: () => void) {
+function useDelete(kind: Kind, id: string | undefined, onClose: () => void, onError: (message: string) => void) {
   const experiments = useStore((s) => s.experiments)
   const del = useStore((s) => s.deleteObject)
   if (!id) return undefined
   const used = usedBy(experiments, kind, id)
   return () => {
-    if (used.length) {
-      alert(`This ${kind} is used by: ${used.map((e) => e.name).join(', ')}. Remove it from those experiments first.`)
-      return
-    }
-    if (confirm(`Delete this ${kind}? Past runs keep their own copy.`)) {
-      del(kind, id)
-      onClose()
-    }
+    const consequence =
+      kind === 'input'
+        ? 'It will be removed from the input lists of those experiments.'
+        : "Those experiments will show it as missing and can't run until you pick another."
+    const warning = used.length ? ` This ${kind} is used by ${used.map((e) => e.name).join(', ')}. ${consequence}` : ''
+    if (!confirm(`Delete this ${kind}?${warning} Past runs keep their own copy.`)) return
+    void (async () => {
+      try {
+        await del(kind, id)
+        onClose()
+      } catch (e) {
+        onError(errorMessage(e))
+      }
+    })()
   }
 }
 
 export function InputEditor({ initial, onClose, onSaved }: { initial?: Input; onClose: () => void; onSaved?: (id: string) => void }) {
   const projectId = useStore((s) => s.projectId)
   const save = useStore((s) => s.saveInput)
-  const [v, setV] = useState<Input>(() => initial ?? { id: uid(), projectId, name: '', content: '', label: 'train' })
-  const onDelete = useDelete('input', initial?.id, onClose)
+  const [v, setV] = useState<Input>(() => initial ?? { id: '', projectId, name: '', content: '', label: 'train' })
+  const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const onDelete = useDelete('input', initial?.id, onClose, setSaveError)
   const ok = v.name.trim() && v.content.trim()
-  const saveAndClose = () => {
-    save(v)
-    onSaved?.(v.id)
-    onClose()
+  const saveAndClose = async () => {
+    setBusy(true)
+    setSaveError(null)
+    try {
+      const saved = await save(v)
+      onSaved?.(saved.id)
+      onClose()
+    } catch (e) {
+      setSaveError(errorMessage(e))
+      setBusy(false)
+    }
   }
   return (
-    <Modal title={initial ? 'Edit input' : 'New input'} onClose={onClose} footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={saveAndClose} />}>
+    <Modal
+      title={initial ? 'Edit input' : 'New input'}
+      onClose={onClose}
+      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy} onSave={() => void saveAndClose()} />}
+    >
       <div className="flex flex-col gap-5">
         <UsedBy kind="input" id={initial?.id} />
         <Field label="Name">{(id) => <input id={id} className={inputCls} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
@@ -99,6 +130,11 @@ export function InputEditor({ initial, onClose, onSaved }: { initial?: Input; on
           </div>
           <p className="text-xs text-fg-3">The label applies in every experiment that uses this input.</p>
         </fieldset>
+        {saveError && (
+          <p role="alert" className="text-sm text-danger">
+            {saveError}
+          </p>
+        )}
       </div>
     </Modal>
   )
@@ -109,9 +145,11 @@ export function PromptEditor({ initial, onClose, onSaved }: { initial?: Prompt; 
   const save = useStore((s) => s.savePrompt)
   const defaultModel = useDefaultModel()
   const [v, setV] = useState<Prompt>(
-    () => initial ?? { id: uid(), projectId, name: '', text: 'Ticket:\n{{input}}', model: defaultModel, outputSchema: '' },
+    () => initial ?? { id: '', projectId, name: '', text: 'Ticket:\n{{input}}', model: defaultModel, outputSchema: '' },
   )
-  const onDelete = useDelete('prompt', initial?.id, onClose)
+  const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const onDelete = useDelete('prompt', initial?.id, onClose, setSaveError)
   let schemaError: string | undefined
   if (v.outputSchema.trim()) {
     try {
@@ -121,17 +159,24 @@ export function PromptEditor({ initial, onClose, onSaved }: { initial?: Prompt; 
     }
   }
   const ok = v.name.trim() && v.text.trim() && v.model && !schemaError
-  const saveAndClose = () => {
-    save(v)
-    onSaved?.(v.id)
-    onClose()
+  const saveAndClose = async () => {
+    setBusy(true)
+    setSaveError(null)
+    try {
+      const saved = await save(v)
+      onSaved?.(saved.id)
+      onClose()
+    } catch (e) {
+      setSaveError(errorMessage(e))
+      setBusy(false)
+    }
   }
   return (
     <Modal
       wide
       title={initial ? 'Edit prompt' : 'New prompt'}
       onClose={onClose}
-      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={saveAndClose} />}
+      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy} onSave={() => void saveAndClose()} />}
     >
       <div className="flex flex-col gap-5">
         <UsedBy kind="prompt" id={initial?.id} />
@@ -156,6 +201,11 @@ export function PromptEditor({ initial, onClose, onSaved }: { initial?: Prompt; 
             />
           )}
         </Field>
+        {saveError && (
+          <p role="alert" className="text-sm text-danger">
+            {saveError}
+          </p>
+        )}
       </div>
     </Modal>
   )
@@ -168,7 +218,7 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
   const [v, setV] = useState<Judge>(
     () =>
       initial ?? {
-        id: uid(),
+        id: '',
         projectId,
         name: '',
         basePrompt: '',
@@ -177,7 +227,9 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
         model: defaultModel,
       },
   )
-  const onDelete = useDelete('judge', initial?.id, onClose)
+  const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const onDelete = useDelete('judge', initial?.id, onClose, setSaveError)
   const setChar = (i: number, c: Characteristic) => setV({ ...v, characteristics: v.characteristics.map((x, j) => (j === i ? c : x)) })
   const names = v.characteristics.map((c) => c.name.trim())
   const dupes = names.some((n, i) => n && names.indexOf(n) !== i)
@@ -185,10 +237,17 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
 
   const shape = Object.fromEntries(v.characteristics.filter((c) => c.name.trim()).map((c) => [c.name.trim(), c.type === 'number' ? 'number 0-1' : 'string']))
   const preview = v.mode === 'batch' ? [shape, '...one per output'] : shape
-  const saveAndClose = () => {
-    save(v)
-    onSaved?.(v.id)
-    onClose()
+  const saveAndClose = async () => {
+    setBusy(true)
+    setSaveError(null)
+    try {
+      const saved = await save(v)
+      onSaved?.(saved.id)
+      onClose()
+    } catch (e) {
+      setSaveError(errorMessage(e))
+      setBusy(false)
+    }
   }
 
   return (
@@ -196,7 +255,7 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
       wide
       title={initial ? 'Edit judge' : 'New judge'}
       onClose={onClose}
-      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} onSave={saveAndClose} />}
+      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy} onSave={() => void saveAndClose()} />}
     >
       <div className="flex flex-col gap-5">
         <UsedBy kind="judge" id={initial?.id} />
@@ -274,6 +333,11 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
             <p className="mt-1.5 text-xs text-fg-3">Built from your characteristics. You don't write a schema.</p>
           </div>
         </div>
+        {saveError && (
+          <p role="alert" className="text-sm text-danger">
+            {saveError}
+          </p>
+        )}
       </div>
     </Modal>
   )

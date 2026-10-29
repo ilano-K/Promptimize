@@ -66,10 +66,15 @@ export function Settings() {
         </section>
 
         <section className="border-t border-line pt-6">
-          <h2 className="mb-1 text-[15px] font-semibold">Prototype data</h2>
-          <p className="mb-4 text-sm text-fg-2">This prototype saves to your browser. Reset to bring back the examples.</p>
-          <Button variant="danger" onClick={() => confirm('Reset all prototype data to the examples?') && resetDemo()}>
-            Reset example data
+          <h2 className="mb-1 text-[15px] font-semibold">Local runs</h2>
+          <p className="mb-4 text-sm text-fg-2">
+            Runs and optimize loops are simulated in this browser. Projects, the library and experiments are saved on the server.
+          </p>
+          <Button
+            variant="danger"
+            onClick={() => confirm('Clear all runs and optimize loops from this browser? Projects and library objects stay.') && resetDemo()}
+          >
+            Clear local runs
           </Button>
         </section>
       </div>

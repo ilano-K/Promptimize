@@ -2,7 +2,7 @@ import { ArrowClockwise, ArrowLeft, Columns, PencilSimple, Play, Sparkle, Stop, 
 import { useState } from 'react'
 import { JudgeEditor, PromptEditor } from '../components/editors'
 import { Button, Empty, Field, inputCls, LabelTag, Modal, ModelSelect, PageHeader, Panel, Score, Tag, textareaCls } from '../components/ui'
-import { timeAgo } from '../components/ui.helpers'
+import { errorMessage, timeAgo } from '../components/ui.helpers'
 import { Select } from '../components/Select'
 import { go } from '../router'
 import { averages, useStoreShallow } from '../store'
@@ -30,6 +30,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
   const e = s.experiments.find((x) => x.id === id)
   const [editing, setEditing] = useState<'exp' | 'prompt' | 'judge' | null>(null)
   const [optimizing, setOptimizing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   if (!e) {
     return <Empty icon={<WarningCircle size={28} />} title="Experiment not found" body="It may have been deleted." action={<Button onClick={() => go('experiments')}>Back to experiments</Button>} />
@@ -62,7 +63,13 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
       </a>
       <PageHeader
         title={e.name}
-        sub={judge ? 'Run sends every input to the prompt, then every output to the judge.' : 'Prompt-only: input, prompt, output. No scores, so no optimize.'}
+        sub={
+          !prompt
+            ? 'Missing prompt: edit the experiment and pick a new one. Runs need one.'
+            : !judge
+              ? 'Missing judge: edit the experiment and pick a new one. Runs and optimize need one.'
+              : 'Run sends every input to the prompt, then every output to the judge.'
+        }
         actions={
           <>
             <Button variant="ghost" onClick={() => setEditing('exp')}>
@@ -71,10 +78,10 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
             <Button onClick={() => go(`compare?a=${e.id}`)} disabled={!runs.length}>
               <Columns size={15} /> Compare
             </Button>
-            <Button onClick={() => setOptimizing(true)} disabled={!judge || running}>
+            <Button onClick={() => setOptimizing(true)} disabled={!prompt || !judge || running}>
               <Sparkle size={15} /> Optimize
             </Button>
-            <Button variant="primary" disabled={running || !prompt} onClick={() => go(`experiments/${e.id}?run=${s.startRun(e.id)}`)}>
+            <Button variant="primary" disabled={running || !prompt || !judge} onClick={() => go(`experiments/${e.id}?run=${s.startRun(e.id)}`)}>
               <Play size={15} weight="fill" /> Run
             </Button>
           </>
@@ -89,9 +96,15 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
               Edit
             </Button>
           </div>
-          <p className="font-mono text-sm font-medium">{prompt?.name}</p>
-          <p className="font-mono text-xs text-fg-3">{prompt?.model}</p>
-          <pre className="mt-3 max-h-28 overflow-y-auto font-mono text-xs leading-relaxed whitespace-pre-wrap text-fg-2">{prompt?.text}</pre>
+          {prompt ? (
+            <>
+              <p className="font-mono text-sm font-medium">{prompt.name}</p>
+              <p className="font-mono text-xs text-fg-3">{prompt.model}</p>
+              <pre className="mt-3 max-h-28 overflow-y-auto font-mono text-xs leading-relaxed whitespace-pre-wrap text-fg-2">{prompt.text}</pre>
+            </>
+          ) : (
+            <p className="text-sm text-warn">Missing prompt. Use Edit to pick another one from the library.</p>
+          )}
         </Panel>
         <Panel className="p-4">
           <div className="mb-2 flex items-center justify-between">
@@ -117,7 +130,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
               </div>
             </>
           ) : (
-            <p className="text-sm text-fg-2">None. Add a judge to get scores and use optimize.</p>
+            <p className="text-sm text-warn">Missing judge. Use Edit to pick another one from the library.</p>
           )}
         </Panel>
         <Panel className="p-4">
@@ -183,7 +196,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
             title="Not run yet"
             body="A run sends every input to the prompt and saves a snapshot of exactly what was used."
             action={
-              <Button variant="primary" disabled={!prompt} onClick={() => go(`experiments/${e.id}?run=${s.startRun(e.id)}`)}>
+              <Button variant="primary" disabled={!prompt || !judge} onClick={() => go(`experiments/${e.id}?run=${s.startRun(e.id)}`)}>
                 <Play size={15} weight="fill" /> Run experiment
               </Button>
             }
@@ -195,14 +208,22 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
         <Button
           variant="danger"
           size="sm"
+          disabled={deleting}
           onClick={() => {
-            if (confirm('Delete this experiment and its runs? Library objects stay.')) {
-              s.deleteExperiment(e.id)
-              go('experiments')
-            }
+            if (!confirm('Delete this experiment and its runs? Library objects stay.')) return
+            setDeleting(true)
+            void (async () => {
+              try {
+                await s.deleteExperiment(e.id)
+                go('experiments')
+              } catch (err) {
+                alert(errorMessage(err))
+                setDeleting(false)
+              }
+            })()
           }}
         >
-          <Trash size={14} /> Delete experiment
+          <Trash size={14} /> {deleting ? 'Deleting…' : 'Delete experiment'}
         </Button>
       </div>
 
