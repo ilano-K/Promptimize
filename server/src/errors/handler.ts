@@ -9,8 +9,10 @@ import { ApiError } from "./api";
 const statusByCode: Record<DomainErrorCode, ContentfulStatusCode> = {
   VALIDATION_ERROR: 400,
   MODEL_NOT_CONFIGURED: 400,
+  MISSING_BASE_URL: 400,
   NOT_FOUND: 404,
   DUPLICATE_NAME: 409,
+  AI_INVALID_OUTPUT: 422,
 };
 
 export const errorHandler: ErrorHandler = (err, c) => {

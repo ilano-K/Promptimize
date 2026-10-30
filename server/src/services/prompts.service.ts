@@ -4,6 +4,7 @@ import { prompts } from "../db/schemas";
 import { DuplicateNameError, NotFoundError } from "../errors/domain";
 import { readProject } from "./projects.service";
 import { assertModelConfigured } from "../llm/models";
+import { assertValidSchema } from "../llm/schema";
 import { translateDbError, type DomainErrorsByCode } from "../db/errors";
 import type {
   CreatePromptBody,
@@ -30,6 +31,7 @@ export function createPrompt(
 ): Prompt {
   readProject(projectId);
   assertModelConfigured(data.model);
+  if (data.outputSchema) assertValidSchema(data.outputSchema);
   const map: DomainErrorsByCode = {
     DUPLICATE_NAME: new DuplicateNameError("prompt", data.name),
   };
@@ -59,6 +61,7 @@ export function updatePrompt(id: number, data: UpdatePromptBody): Prompt {
     ? { DUPLICATE_NAME: new DuplicateNameError("prompt", data.name) }
     : {};
   if (data.model) assertModelConfigured(data.model);
+  if (data.outputSchema) assertValidSchema(data.outputSchema);
   try {
     const [prompt] = db
       .update(prompts)

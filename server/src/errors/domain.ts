@@ -40,3 +40,18 @@ export class ModelNotConfiguredError extends DomainError {
     super(`Model "${model}" is not configured`);
   }
 }
+
+export class MissingBaseUrlError extends DomainError {
+  readonly code = "MISSING_BASE_URL";
+  constructor(provider: string) {
+    super(`Provider "${provider}" needs a base URL`);
+  }
+}
+
+export class InvalidOutput extends DomainError {
+  readonly code = "AI_INVALID_OUTPUT";
+  constructor(model: string, detail?: string) {
+    const base = `Model "${model}" returned an invalid output`;
+    super(detail ? `${base}: ${detail}` : base);
+  }
+}

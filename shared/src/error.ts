@@ -4,7 +4,9 @@ export type ApiErrorCode =
   | "DUPLICATE_NAME"
   | "HTTP_ERROR"
   | "INTERNAL_ERROR"
-  | "MODEL_NOT_CONFIGURED";
+  | "MODEL_NOT_CONFIGURED"
+  | "MISSING_BASE_URL"
+  | "AI_INVALID_OUTPUT";
 
 export type ApiErrorBody = {
   error: {
