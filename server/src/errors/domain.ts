@@ -55,3 +55,13 @@ export class InvalidOutput extends DomainError {
     super(detail ? `${base}: ${detail}` : base);
   }
 }
+
+export class IncompleteOutput extends DomainError {
+  readonly code = "AI_INCOMPLETE_OUTPUT";
+  constructor(model: string, received: number, expected: number) {
+    const verdict = received === 1 ? "verdict" : "verdicts";
+    super(
+      `Model "${model}" returned ${received} ${verdict} for ${expected} outputs`,
+    );
+  }
+}

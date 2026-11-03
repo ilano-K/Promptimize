@@ -3,21 +3,13 @@ import { resolveModel } from "./client";
 import { getValidator, formatErrors, assertValidSchema } from "./schema";
 import type { JsonSchema } from "@promptimize/shared";
 import { InvalidOutput } from "../errors/domain";
-import { extractJson, preview } from "../lib/llm";
+import { extractJson, preview, schemaInstruction } from "../lib/llm";
 
 interface GenerationOptions {
   temperature?: number;
 }
 
-// Not every provider is compatible with a response_format, so the schema is described in
-// the prompt as well
-function schemaInstruction(schema: JsonSchema): string {
-  return (
-    `\n\nRespond with a single JSON value that conforms to this JSON Schema.` +
-    `\nOutput only the JSON: no prose, no explanation, no markdown fences.` +
-    `\nSchema: ${JSON.stringify(schema)}`
-  );
-}
+
 
 export async function runPrompt(
   modelId: string,

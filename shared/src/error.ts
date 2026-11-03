@@ -6,7 +6,8 @@ export type ApiErrorCode =
   | "INTERNAL_ERROR"
   | "MODEL_NOT_CONFIGURED"
   | "MISSING_BASE_URL"
-  | "AI_INVALID_OUTPUT";
+  | "AI_INVALID_OUTPUT"
+  | "AI_INCOMPLETE_OUTPUT";
 
 export type ApiErrorBody = {
   error: {

@@ -42,3 +42,13 @@ export function extractJson(text: string): unknown {
 
 export const preview = (text: string) =>
   JSON.stringify(text.length > 120 ? `${text.slice(0, 120)}...` : text);
+
+// Not every provider is compatible with a response_format, so the schema is described in
+// the prompt as well
+export function schemaInstruction(schema: JsonSchema): string {
+  return (
+    `\n\nRespond with a single JSON value that conforms to this JSON Schema.` +
+    `\nOutput only the JSON: no prose, no explanation, no markdown fences.` +
+    `\nSchema: ${JSON.stringify(schema)}`
+  );
+}

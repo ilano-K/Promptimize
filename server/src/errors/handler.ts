@@ -13,6 +13,7 @@ const statusByCode: Record<DomainErrorCode, ContentfulStatusCode> = {
   NOT_FOUND: 404,
   DUPLICATE_NAME: 409,
   AI_INVALID_OUTPUT: 422,
+  AI_INCOMPLETE_OUTPUT: 422,
 };
 
 export const errorHandler: ErrorHandler = (err, c) => {
