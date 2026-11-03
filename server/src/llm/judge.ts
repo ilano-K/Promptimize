@@ -15,7 +15,7 @@ export async function judgeOutputs(
 ): Promise<JudgeOutcome[]> {
   const judgeOutcome: JudgeOutcome[] = [];
 
-  if (judge.mode === "individual") {
+  if (judge.mode !== "batch") {
     for (const output of outputs) {
       const result = await judgeIndividual(
         judge.model,
