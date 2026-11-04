@@ -27,3 +27,9 @@ export type LoopState = z.infer<typeof loopState>;
 
 export const runState = z.enum(runStatuses);
 export type RunState = z.infer<typeof runState>;
+
+// persisted result states only; generating/judging are in-memory run progress
+export const resultStatuses = ["output_done", "judged", "judge_error"] as const;
+
+export const resultState = z.enum(resultStatuses);
+export type ResultState = z.infer<typeof resultState>;

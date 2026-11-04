@@ -4,10 +4,10 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { runStatuses } from "@promptimize/shared";
 import { experiments } from "./experiments";
 import { optimizeLoops } from "./optimize-loops";
-import { runStatuses } from "@promptimize/shared";
-import { sql } from "drizzle-orm";
 
 export const runs = sqliteTable(
   "runs",
@@ -16,14 +16,24 @@ export const runs = sqliteTable(
     experimentId: integer("experiment_id")
       .notNull()
       .references(() => experiments.id, { onDelete: "cascade" }),
+    // written once at creation, so it is never absent
     snapshot: text("snapshot", { mode: "json" }).notNull(),
-    loopId: integer("loop_id").references(() => optimizeLoops.id),
-    round: integer("rounds"),
-    note: text("note"),
-    status: text("status", { enum: runStatuses }),
-    startedAt: text("startedAt")
+    // stored, not derived: pending exists before any result row does, and
+    // interrupted is only knowable after a restart
+    status: text("status", { enum: runStatuses }).notNull().default("pending"),
+    startedAt: text("started_at")
       .notNull()
       .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+    loopId: integer("loop_id").references(() => optimizeLoops.id, {
+      onDelete: "cascade",
+    }),
+    // 1-based position inside its loop; null for runs outside an optimize loop
+    round: integer("round"),
+    note: text("note"),
   },
-  (t) => [uniqueIndex("runs_loop_id_round_key").on(t.loopId, t.round)],
+  (t) => [
+    // one run per round per loop; SQLite keeps NULLs distinct, so in-loop and
+    // out-of-loop runs never collide
+    uniqueIndex("runs_loop_id_round_key").on(t.loopId, t.round),
+  ],
 );
