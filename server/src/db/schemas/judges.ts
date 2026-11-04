@@ -29,6 +29,10 @@ export const judges = sqliteTable(
       "judges_characteristics_valid",
       sql`json_valid(${t.characteristics})`,
     ),
-    uniqueIndex("judges_project_id_name_key").on(t.projectId, t.name),
+    // lower(name): case-insensitive, same rule as prompts
+    uniqueIndex("judges_project_id_name_key").on(
+      t.projectId,
+      sql`lower(${t.name})`,
+    ),
   ],
 );
