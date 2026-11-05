@@ -7,8 +7,18 @@ import {
 import { parseId } from "../lib/parse-id";
 import { validateJson } from "../lib/validate";
 import { updateExperimentBody } from "@promptimize/shared";
+import { executeRun, markRunFailed, startRun } from "../services/runs.service";
+import { queueRun } from "../jobs/runs";
 
 export const experimentsRoutes = new Hono();
+
+// RUN experiment
+experimentsRoutes.post("/:id/runs", (c) => {
+  const id = parseId(c.req.param("id"), "experiment");
+  const run = startRun(id);
+  queueRun(run.id, () => executeRun(run.id), markRunFailed);
+  return c.json(run, 201);
+});
 
 // GET experiment
 experimentsRoutes.get("/:id", (c) => {

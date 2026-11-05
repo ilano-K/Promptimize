@@ -1,0 +1,156 @@
+import type { Run, RunState } from "@promptimize/shared";
+import { readExperiment } from "./experiments.service";
+import { readPrompt } from "./prompts.service";
+import { NotFoundError, ValidationError } from "../errors/domain";
+import { readJudge } from "./judges.service";
+import { buildSnapshot } from "../lib/snapshot";
+import { readInput } from "./inputs.service";
+import { getConfig } from "../config";
+import { db } from "../db";
+import { results, runs } from "../db/schemas";
+import { eq } from "drizzle-orm";
+import { runPrompt } from "../llm/generate";
+import { saveResult } from "./results.service";
+import { judgeOutputs, type JudgeOutcome } from "../llm/judge";
+
+function readRun(runId: number): Run {
+  const run = db.select().from(runs).where(eq(runs.id, runId)).get();
+  if (!run) {
+    throw new NotFoundError("Run", runId);
+  }
+  return run;
+}
+
+export function startRun(experimentId: number): Run {
+  const experiment = readExperiment(experimentId);
+
+  // validate prompt, judge, input exists
+  if (experiment.promptId === null) {
+    throw new ValidationError(
+      `Prompt ID: ${experiment.promptId} was not found for Experiment: ${experimentId}`,
+    );
+  }
+
+  if (experiment.judgeId === null) {
+    throw new ValidationError(
+      `Judge ID: ${experiment.judgeId} was not found for Experiment ID: ${experimentId}`,
+    );
+  }
+
+  if (experiment.inputIds.length === 0) {
+    throw new ValidationError(
+      `No inputs were found for Experiment ID: ${experimentId}`,
+    );
+  }
+
+  const prompt = readPrompt(experiment.promptId);
+  const judge = readJudge(experiment.judgeId);
+  const inputs = experiment.inputIds.map(readInput);
+
+  const snapshot = buildSnapshot({
+    prompt,
+    judge,
+    inputs,
+    providers: getConfig().providers,
+    now: new Date(),
+  });
+
+  // insert and return run
+  const [run] = db
+    .insert(runs)
+    .values({ experimentId, snapshot, startedAt: snapshot.createdAt })
+    .returning()
+    .all();
+
+  return run;
+}
+
+function setStatus(runId: number, status: RunState): void {
+  db.update(runs).set({ status: status }).where(eq(runs.id, runId)).run();
+}
+
+export async function executeRun(runId: number): Promise<void> {
+  setStatus(runId, "running");
+  const pendingOutputs: { resultId: number; output: string }[] = [];
+
+  const run = readRun(runId);
+  const snapshot = run.snapshot;
+  const promptObject = snapshot.prompt;
+  const judge = snapshot.judge;
+
+  // run AI request per input available
+  for (const input of snapshot.inputs) {
+    const output = await runPrompt(
+      promptObject.model,
+      promptObject.text,
+      input.content,
+      promptObject.outputSchema,
+    );
+
+    const outputText = storedOutput(output);
+    const result = saveResult(runId, input.key, outputText);
+
+    pendingOutputs.push({ resultId: result.id, output: outputText });
+  }
+
+  if (judge) {
+    const outcomes = await judgeOutputs(
+      judge,
+      pendingOutputs.map((p) => p.output),
+    );
+    saveJudgeOutcomes(outcomes, pendingOutputs);
+  }
+
+  setStatus(runId, "done");
+}
+
+function saveJudgeOutcomes(
+  outcomes: JudgeOutcome[],
+  outputs: { resultId: number; output: string }[],
+) {
+  for (const [i, outcome] of outcomes.entries()) {
+    const resultId = outputs[i].resultId;
+    if ("verdict" in outcome) {
+      db.update(results)
+        .set({
+          status: "judged",
+          judgeResults: outcome.verdict,
+          judgeError: null,
+        })
+        .where(eq(results.id, resultId))
+        .run();
+    } else {
+      db.update(results)
+        .set({
+          status: "judge_error",
+          judgeResults: null,
+          judgeError: outcome.error,
+        })
+        .where(eq(results.id, resultId))
+        .run();
+    }
+  }
+}
+
+function failureMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.slice(0, 2000); // provider errors can be long
+}
+
+export function markRunFailed(runId: number, error: unknown): void {
+  db.update(runs)
+    .set({ status: "failed", error: failureMessage(error) })
+    .where(eq(runs.id, runId))
+    .run();
+}
+
+// converts runPrompt returned object into a text the results table (db) accepts
+function storedOutput({
+  text,
+  object,
+}: {
+  text: string;
+  object?: unknown;
+}): string {
+  return object === undefined ? text : JSON.stringify(object);
+}
