@@ -5,7 +5,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
-import { runStatuses } from "@promptimize/shared";
+import { runStatuses, type Snapshot } from "@promptimize/shared";
 import { experiments } from "./experiments";
 import { optimizeLoops } from "./optimize-loops";
 
@@ -17,7 +17,7 @@ export const runs = sqliteTable(
       .notNull()
       .references(() => experiments.id, { onDelete: "cascade" }),
     // written once at creation, so it is never absent
-    snapshot: text("snapshot", { mode: "json" }).notNull(),
+    snapshot: text("snapshot", { mode: "json" }).$type<Snapshot>().notNull(),
     // stored, not derived: pending exists before any result row does, and
     // interrupted is only knowable after a restart
     status: text("status", { enum: runStatuses }).notNull().default("pending"),
@@ -30,6 +30,7 @@ export const runs = sqliteTable(
     // 1-based position inside its loop; null for runs outside an optimize loop
     round: integer("round"),
     note: text("note"),
+    error: text("error")
   },
   (t) => [
     // one run per round per loop; SQLite keeps NULLs distinct, so in-loop and

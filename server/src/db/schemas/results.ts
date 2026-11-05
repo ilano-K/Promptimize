@@ -26,6 +26,7 @@ export const results = sqliteTable(
     status: text("status", { enum: resultStatuses })
       .notNull()
       .default("output_done"),
+    judgeError: text("judge_error"),
   },
   (t) => [
     // exactly one result per input per run, so retrying judging updates rows
