@@ -8,5 +8,6 @@ export * from "./prompts.js";
 export * from "./inputs.js";
 export * from "./judges.js";
 export * from "./experiments.js";
+export * from "./runs.js";
 
 export type Health = { ok: true };

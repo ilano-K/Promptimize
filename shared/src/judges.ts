@@ -1,13 +1,14 @@
 import { z } from "zod";
 
-const validModes = ["individual", "batch"] as const;
+export const judgeModes = ["individual", "batch"] as const;
+export const judgeMode = z.enum(judgeModes);
 
 export const characteristic = z.object({
   name: z.string().trim().min(1, "Characteristic name is required."),
   type: z.enum(["text", "number"]),
 });
 
-const characteristics = z
+export const characteristics = z
   .array(characteristic)
   .min(1, "At least one characteristic is required.")
   .refine(
@@ -24,7 +25,7 @@ export const judge = z.object({
   name: z.string(),
   basePrompt: z.string(),
   characteristics: characteristics,
-  mode: z.enum(validModes),
+  mode: judgeMode,
   model: z.string(),
 });
 
@@ -32,7 +33,7 @@ export const createJudgeBody = z.object({
   name: z.string().trim().min(1),
   basePrompt: z.string().trim().min(1),
   characteristics: characteristics,
-  mode: z.enum(validModes),
+  mode: judgeMode,
   model: z.string().trim().min(1),
 });
 

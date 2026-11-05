@@ -1,6 +1,6 @@
 import z from "zod";
 
-const validKinds = [
+export const providerKinds = [
   "anthropic",
   "openai",
   "google",
@@ -11,7 +11,7 @@ const validKinds = [
 
 const providerShape = z.object({
   name: z.string().trim().min(1).max(100),
-  kind: z.enum(validKinds),
+  kind: z.enum(providerKinds),
   baseUrl: z.url({ message: "Must be a valid URL" }).optional().or(z.literal("")),
   apiKey: z.string().trim().optional(),
   models: z.array(z.string().trim().min(1)),
@@ -19,7 +19,7 @@ const providerShape = z.object({
 
 // openai-compatible has no default endpoint, so a base url is required for that kind
 const hasBaseUrl = (data: {
-  kind: (typeof validKinds)[number];
+  kind: (typeof providerKinds)[number];
   baseUrl?: string;
 }) => data.kind !== "openai-compatible" || Boolean(data.baseUrl?.trim());
 
@@ -52,7 +52,7 @@ export const updateSettingsBody = z
 
 export const providerConnectionBody = z
   .object({
-    kind: z.enum(validKinds),
+    kind: z.enum(providerKinds),
     apiKey: z.string().trim().min(1).optional(),
     baseUrl: z.url().optional().or(z.literal("")),
   })
@@ -67,7 +67,7 @@ export type SafeProvider = Omit<Provider, "apiKey"> & {
 };
 export type ProviderConnectionBody = z.infer<typeof providerConnectionBody>;
 
-export type ProviderKind = (typeof validKinds)[number];
+export type ProviderKind = (typeof providerKinds)[number];
 
 export type Settings = {
   defaultOptimizerModel: string;
