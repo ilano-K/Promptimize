@@ -8,7 +8,7 @@ import { readInput } from "./inputs.service";
 import { getConfig } from "../config";
 import { db } from "../db";
 import { results, runs } from "../db/schemas";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { runPrompt } from "../llm/generate";
 import { listResults, saveResult } from "./results.service";
 import { judgeOutputs, type JudgeOutcome } from "../llm/judge";
@@ -156,6 +156,20 @@ function saveJudgeOutcomes(
         .run();
     }
   }
+}
+
+// The run queue lives in memory, so a restart leaves any run it was executing
+// stuck in a non-terminal state with no process to finish it. Call at boot,
+// after migrations and before serving, and return the ids that were buried.
+export function interruptLeftoverRuns(): number[] {
+  const nonTerminal: RunState[] = ["pending", "running", "stopping"];
+  const buried = db
+    .update(runs)
+    .set({ status: "interrupted" })
+    .where(inArray(runs.status, nonTerminal))
+    .returning({ id: runs.id })
+    .all();
+  return buried.map((run) => run.id);
 }
 
 function failureMessage(error: unknown): string {
