@@ -101,7 +101,10 @@ export function createExperiment(
     "prompt",
     data.promptId,
   );
-  assertInProject(readJudge(data.judgeId), projectId, "judge", data.judgeId);
+
+  if (data.judgeId !== null) {
+    assertInProject(readJudge(data.judgeId), projectId, "judge", data.judgeId);
+  }
 
   // inputIds live in the join table; de-dupe because its composite PK rejects
   // repeated (experiment, input) pairs
@@ -165,10 +168,9 @@ export function editExperiment(
     );
   }
 
-  if (data.judgeId !== undefined) {
+  if (data.judgeId !== undefined && data.judgeId !== null) {
     assertInProject(readJudge(data.judgeId), projectId, "judge", data.judgeId);
   }
-
   // inputIds are stored in the join table, not on the experiments row; de-dupe
   // because the join table's composite PK rejects repeated pairs
   const { inputIds: rawInputIds, ...rest } = data;

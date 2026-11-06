@@ -58,20 +58,17 @@ export function startRun(experimentId: number): Run {
     );
   }
 
-  if (experiment.judgeId === null) {
-    throw new ValidationError(
-      `The judge for experiment ${experimentId} was deleted; pick another before running.`,
-    );
-  }
-
   if (experiment.inputIds.length === 0) {
     throw new ValidationError(
       `Experiment ${experimentId} has no inputs; add at least one before running.`,
     );
   }
 
+  const judge =
+    experiment.judgeId === null ? null : readJudge(experiment.judgeId);
+
   const prompt = readPrompt(experiment.promptId);
-  const judge = readJudge(experiment.judgeId);
+
   const inputs = experiment.inputIds.map(readInput);
 
   const snapshot = buildSnapshot({
@@ -93,14 +90,16 @@ export function startRun(experimentId: number): Run {
 }
 
 function setStatus(runId: number, status: RunState): void {
-  db.update(runs).set({ status: status }).where(eq(runs.id, runId)).run();
+  db.update(runs).set({ status }).where(eq(runs.id, runId)).run();
 }
 
 export async function executeRun(runId: number): Promise<void> {
-  setStatus(runId, "running");
   const pendingOutputs: { resultId: number; output: string }[] = [];
 
   const run = readRun(runId);
+
+  setStatus(runId, "running");
+
   const snapshot = run.snapshot;
   const promptObject = snapshot.prompt;
   const judge = snapshot.judge;
@@ -165,8 +164,10 @@ function failureMessage(error: unknown): string {
 }
 
 export function markRunFailed(runId: number, error: unknown): void {
+  const message = failureMessage(error);
+  console.error(`run ${runId} failed: ${message}`);
   db.update(runs)
-    .set({ status: "failed", error: failureMessage(error) })
+    .set({ status: "failed", error: message })
     .where(eq(runs.id, runId))
     .run();
 }
