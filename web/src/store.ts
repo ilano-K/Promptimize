@@ -198,13 +198,12 @@ export const useStore = create<Data & Actions>()(
         const s = get()
         const e = s.experiments.find((x) => x.id === experimentId)
         if (!e) throw new Error('Experiment not found.')
-        // A deleted prompt/judge leaves the reference null; the experiment can't run until one is picked.
+        // A deleted prompt leaves the reference null; the experiment can't run until one is picked.
         if (!e.promptId) throw new Error('This experiment has no prompt. Pick one before running.')
-        if (!e.judgeId) throw new Error('This experiment has no judge. Pick one before running.')
         const prompt = s.prompts.find((p) => p.id === e.promptId)
-        const judge = s.judges.find((j) => j.id === e.judgeId) ?? null
         if (!prompt) throw new Error('The prompt for this experiment is missing. Pick one before running.')
-        if (!judge) throw new Error('The judge for this experiment is missing. Pick one before running.')
+        // A null judge is prompt-only: outputs are saved, never scored.
+        const judge = e.judgeId ? (s.judges.find((j) => j.id === e.judgeId) ?? null) : null
         let ins = s.inputs.filter((i) => e.inputIds.includes(i.id))
         if (opts.labels) ins = ins.filter((i) => opts.labels!.includes(i.label))
         const run: Run = {

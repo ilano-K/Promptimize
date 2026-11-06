@@ -125,13 +125,13 @@ export function experimentFromApi(x: ApiExperiment): Experiment {
   }
 }
 
-/** The API has no "prompt-only" mode yet, so both references are required. */
+/** A null judge is a prompt-only experiment: outputs are saved but never scored. */
 function experimentBody(x: Experiment) {
-  if (!x.promptId || !x.judgeId) throw new Error('An experiment needs a prompt and a judge before it can be saved.')
+  if (!x.promptId) throw new Error('An experiment needs a prompt before it can be saved.')
   return {
     name: x.name.trim(),
     promptId: Number(x.promptId),
-    judgeId: Number(x.judgeId),
+    judgeId: x.judgeId === null ? null : Number(x.judgeId),
     inputIds: x.inputIds.map(Number),
   }
 }

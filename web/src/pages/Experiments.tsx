@@ -25,7 +25,7 @@ export function Experiments() {
     <>
       <PageHeader
         title="Experiments"
-        sub="One prompt, a set of inputs and a judge, all picked from the library."
+        sub="One prompt and a set of inputs, with an optional judge to score them."
         actions={
           <Button variant="primary" onClick={() => setCreating(true)}>
             <Plus size={15} /> New experiment
@@ -37,7 +37,7 @@ export function Experiments() {
         <Empty
           icon={<Flask size={28} />}
           title="No experiments yet"
-          body="Pick a prompt, some inputs and a judge. You can create any of them right in the setup form."
+          body="Pick a prompt and some inputs, plus a judge if you want the outputs scored. You can create any of them right in the setup form."
           action={
             <Button variant="primary" onClick={() => setCreating(true)}>
               <Plus size={15} /> New experiment
@@ -66,7 +66,7 @@ export function Experiments() {
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-fg-2">
                     {!prompt && <Tag tone="warn">Missing prompt</Tag>}
-                    {judge ? <span>{judge.name}</span> : <Tag tone="warn">Missing judge</Tag>}
+                    {judge ? <span>{judge.name}</span> : <span className="text-fg-3">no judge</span>}
                     <span className="text-fg-3">with {e.inputIds.length} inputs</span>
                     {loops > 0 && <Tag tone="accent">{loops} optimize loop{loops > 1 ? 's' : ''}</Tag>}
                   </div>
@@ -127,7 +127,7 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [inline, setInline] = useState<'prompt' | 'judge' | 'input' | null>(null)
-  const ok = v.name.trim() && v.promptId && v.judgeId && v.inputIds.length > 0 && !busy
+  const ok = v.name.trim() && v.promptId && v.inputIds.length > 0 && !busy
   const save = async () => {
     setBusy(true)
     setSaveError(null)
@@ -190,7 +190,7 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
                 </div>
               )}
             </Field>
-            <Field label="Judge" help="Every experiment needs a judge; it scores each output.">
+            <Field label="Judge" help="Optional. Without one the run saves every output but scores none.">
               {(id) => (
                 <div className="flex gap-1.5">
                   <Select
@@ -199,7 +199,10 @@ export function ExperimentForm({ initial, onClose }: { initial?: Experiment; onC
                     value={v.judgeId ?? ''}
                     onChange={(judgeId) => setV({ ...v, judgeId: judgeId || null })}
                     placeholder="No judges yet"
-                    options={judges.map((j) => ({ value: j.id, label: j.name, hint: `${j.characteristics.length} checks, ${j.mode}` }))}
+                    options={[
+                      { value: '', label: 'No judge', hint: 'outputs not scored' },
+                      ...judges.map((j) => ({ value: j.id, label: j.name, hint: `${j.characteristics.length} checks, ${j.mode}` })),
+                    ]}
                   />
                   <Button onClick={() => setInline('judge')} aria-label="Create judge">
                     <Plus size={15} />

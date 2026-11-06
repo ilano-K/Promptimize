@@ -67,7 +67,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
           !prompt
             ? 'Missing prompt: edit the experiment and pick a new one. Runs need one.'
             : !judge
-              ? 'Missing judge: edit the experiment and pick a new one. Runs and optimize need one.'
+              ? 'Run sends every input to the prompt; outputs are saved without being scored.'
               : 'Run sends every input to the prompt, then every output to the judge.'
         }
         actions={
@@ -81,7 +81,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
             <Button onClick={() => setOptimizing(true)} disabled={!prompt || !judge || running}>
               <Sparkle size={15} /> Optimize
             </Button>
-            <Button variant="primary" disabled={running || !prompt || !judge} onClick={() => go(`experiments/${e.id}?run=${s.startRun(e.id)}`)}>
+            <Button variant="primary" disabled={running || !prompt} onClick={() => go(`experiments/${e.id}?run=${s.startRun(e.id)}`)}>
               <Play size={15} weight="fill" /> Run
             </Button>
           </>
@@ -130,7 +130,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
               </div>
             </>
           ) : (
-            <p className="text-sm text-warn">Missing judge. Use Edit to pick another one from the library.</p>
+            <p className="text-sm text-fg-2">No judge. This experiment only generates outputs; add one to score them.</p>
           )}
         </Panel>
         <Panel className="p-4">
