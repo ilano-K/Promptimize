@@ -4,6 +4,7 @@ import { characteristics, judgeMode } from "./judges";
 import { providerKinds } from "./settings";
 import { inputLabels } from "./inputs";
 import { runStatuses } from "./statuses";
+import { result } from "./result";
 
 // A snapshot is the copy of an experiment that a run executes and that results,
 // Compare, retry judging and restore all read back. It is stored as JSON, so it
@@ -64,5 +65,19 @@ export const run = z.object({
   error: z.string().nullable(),
 });
 
+export const runProgress = z.object({
+  total: z.number(),
+  outputDone: z.number(),
+  judged: z.number(),
+  judgeError: z.number(),
+});
+
+export const runDetail = run.extend({
+  results: z.array(result),
+  progress: runProgress,
+});
+
+export type RunProgress = z.infer<typeof runProgress>;
+export type RunDetail = z.infer<typeof runDetail>;
 export type Snapshot = z.infer<typeof snapshotV1>;
 export type Run = z.infer<typeof run>;

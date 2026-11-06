@@ -9,5 +9,6 @@ export * from "./inputs.js";
 export * from "./judges.js";
 export * from "./experiments.js";
 export * from "./runs.js";
+export * from "./result.js";
 
 export type Health = { ok: true };
