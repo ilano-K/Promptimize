@@ -32,7 +32,7 @@ export const experiment = z.object({
 export const createExperimentBody = z.object({
   name: z.string().trim().min(1),
   promptId: z.number(),
-  judgeId: z.number(),
+  judgeId: z.number().nullable(),
   inputIds: z.array(z.number()).min(1),
 });
 
