@@ -6,7 +6,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
-import { resultStatuses } from "@promptimize/shared";
+import { resultStatuses, type JudgeVerdict } from "@promptimize/shared";
 import { runs } from "./runs";
 
 export const results = sqliteTable(
@@ -22,7 +22,7 @@ export const results = sqliteTable(
     output: text("output").notNull(),
     // null until judged; an empty object would be indistinguishable from
     // "judged, nothing returned"
-    judgeResults: text("judge_results", { mode: "json" }),
+    judgeResults: text("judge_results", { mode: "json" }).$type<JudgeVerdict>(),
     status: text("status", { enum: resultStatuses })
       .notNull()
       .default("output_done"),

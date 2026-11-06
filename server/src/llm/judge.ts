@@ -2,11 +2,11 @@ import {
   type Characteristics,
   type JsonSchema,
   type Judge,
+  type JudgeVerdict,
 } from "@promptimize/shared";
 import { IncompleteOutput, ValidationError } from "../errors/domain";
 import { runPrompt } from "./generate";
 
-export type JudgeVerdict = Record<string, string | number>;
 export type JudgeOutcome = { verdict: JudgeVerdict } | { error: string };
 
 export async function judgeOutputs(

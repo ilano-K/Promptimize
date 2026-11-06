@@ -1,4 +1,4 @@
-import type { Run, RunState } from "@promptimize/shared";
+import type { Run, RunDetail, RunState } from "@promptimize/shared";
 import { readExperiment } from "./experiments.service";
 import { readPrompt } from "./prompts.service";
 import { NotFoundError, ValidationError } from "../errors/domain";
@@ -10,15 +10,42 @@ import { db } from "../db";
 import { results, runs } from "../db/schemas";
 import { eq } from "drizzle-orm";
 import { runPrompt } from "../llm/generate";
-import { saveResult } from "./results.service";
+import { listResults, saveResult } from "./results.service";
 import { judgeOutputs, type JudgeOutcome } from "../llm/judge";
 
-function readRun(runId: number): Run {
+export function readRun(runId: number): Run {
   const run = db.select().from(runs).where(eq(runs.id, runId)).get();
   if (!run) {
-    throw new NotFoundError("Run", runId);
+    throw new NotFoundError("run", runId);
   }
   return run;
+}
+
+export function readRunDetail(runId: number): RunDetail {
+  const run = readRun(runId);
+  const results = listResults(runId);
+
+  let outputDoneCount = 0;
+  let judgedCount = 0;
+  let judgeErrorCount = 0;
+  for (const result of results) {
+    if (result.status === "output_done") {
+      outputDoneCount++;
+    } else if (result.status === "judge_error") {
+      judgeErrorCount++;
+    } else if (result.status === "judged") {
+      judgedCount++;
+    }
+  }
+
+  const progress = {
+    total: run.snapshot.inputs.length,
+    outputDone: outputDoneCount,
+    judged: judgedCount,
+    judgeError: judgeErrorCount,
+  };
+
+  return { ...run, results, progress };
 }
 
 export function startRun(experimentId: number): Run {
@@ -27,19 +54,19 @@ export function startRun(experimentId: number): Run {
   // validate prompt, judge, input exists
   if (experiment.promptId === null) {
     throw new ValidationError(
-      `Prompt ID: ${experiment.promptId} was not found for Experiment: ${experimentId}`,
+      `The prompt for experiment ${experimentId} was deleted; pick another before running.`,
     );
   }
 
   if (experiment.judgeId === null) {
     throw new ValidationError(
-      `Judge ID: ${experiment.judgeId} was not found for Experiment ID: ${experimentId}`,
+      `The judge for experiment ${experimentId} was deleted; pick another before running.`,
     );
   }
 
   if (experiment.inputIds.length === 0) {
     throw new ValidationError(
-      `No inputs were found for Experiment ID: ${experimentId}`,
+      `Experiment ${experimentId} has no inputs; add at least one before running.`,
     );
   }
 
