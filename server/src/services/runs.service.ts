@@ -1,4 +1,4 @@
-import type { Run, RunDetail, RunState } from "@promptimize/shared";
+import type { Result, Run, RunDetail, RunState } from "@promptimize/shared";
 import { readExperiment } from "./experiments.service";
 import { readPrompt } from "./prompts.service";
 import { NotFoundError, ValidationError } from "../errors/domain";
@@ -12,6 +12,7 @@ import { eq, inArray } from "drizzle-orm";
 import { runPrompt } from "../llm/generate";
 import { listResults, saveResult } from "./results.service";
 import { judgeOutputs, type JudgeOutcome } from "../llm/judge";
+import { isRunActive, queueRun } from "../jobs/runs";
 
 export function readRun(runId: number): Run {
   const run = db.select().from(runs).where(eq(runs.id, runId)).get();
@@ -48,6 +49,56 @@ export function readRunDetail(runId: number): RunDetail {
   return { ...run, results, progress };
 }
 
+// Retries the inputs where error occured during judging.
+export async function retryJudging(runId: number): Promise<void> {
+  // 1. read the run (throws NOT_FOUND)
+  const run = readRun(runId);
+  // 2. refuse if a job is already active for it
+  if (isRunActive(runId)) {
+    throw new ValidationError(
+      "Run is currently executing; wait for it to finish or cancel it.",
+    );
+  }
+
+  // 3. refuse if snapshot.judge is null (prompt-only run has nothing to judge with)
+  if (run.snapshot.judge === null) {
+    throw new ValidationError(
+      "Cannot evaluate this run because no judge is configured. Please add a judge and try again.",
+    );
+  }
+  // 4. collect the rows still in judge_error and refuse if there are none.
+  const results = listResults(runId);
+  const resultsToRetry = results.filter((r) => r.status === "judge_error");
+  if (resultsToRetry.length === 0) {
+    throw new ValidationError(
+      "This run has no failed judgements to retry.",
+    );
+  }
+  // 5. set running, queue the job, return
+  setStatus(runId, "running");
+  void queueRun(
+    runId,
+    () => executeJudging(runId, resultsToRetry),
+    markRetryFailed,
+  );
+}
+
+async function executeJudging(runId: number, resultsToRetry: Result[]) {
+  const run = readRun(runId);
+  const judge = run.snapshot.judge!;
+
+  const outcomes = await judgeOutputs(
+    judge,
+    resultsToRetry.map((r) => r.output),
+  );
+
+  saveJudgeOutcomes(
+    outcomes,
+    resultsToRetry.map((r) => ({ resultId: r.id, output: r.output })),
+  );
+
+  setStatus(runId, "done");
+}
 export function startRun(experimentId: number): Run {
   const experiment = readExperiment(experimentId);
 
@@ -184,6 +235,14 @@ export function markRunFailed(runId: number, error: unknown): void {
     .set({ status: "failed", error: message })
     .where(eq(runs.id, runId))
     .run();
+}
+
+// A retry only re-runs judging, so a failure there must not bury a run whose
+// outputs are complete. Leave it done; the rows that failed keep judge_error
+// and the retry stays available.
+function markRetryFailed(runId: number, error: unknown): void {
+  console.error(`run ${runId}: retry judging failed: ${failureMessage(error)}`);
+  setStatus(runId, "done");
 }
 
 // converts runPrompt returned object into a text the results table (db) accepts
