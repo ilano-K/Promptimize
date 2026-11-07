@@ -22,6 +22,21 @@ export function readRun(runId: number): Run {
   return run;
 }
 
+// ================================
+// === Retrieve and return runs ===
+// ================================
+
+export function listRuns(experimentId: number): Run[] {
+  readExperiment(experimentId);
+  const data = db
+    .select()
+    .from(runs)
+    .where(eq(runs.experimentId, experimentId))
+    .all();
+
+  return data;
+}
+
 export function readRunDetail(runId: number): RunDetail {
   const run = readRun(runId);
   const results = listResults(runId);

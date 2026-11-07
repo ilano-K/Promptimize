@@ -7,7 +7,12 @@ import {
 import { parseId } from "../lib/parse-id";
 import { validateJson } from "../lib/validate";
 import { updateExperimentBody } from "@promptimize/shared";
-import { executeRun, markRunFailed, startRun } from "../services/runs.service";
+import {
+  executeRun,
+  listRuns,
+  markRunFailed,
+  startRun,
+} from "../services/runs.service";
 import { queueRun } from "../jobs/runs";
 
 export const experimentsRoutes = new Hono();
@@ -20,6 +25,12 @@ experimentsRoutes.post("/:id/runs", (c) => {
   return c.json(run, 201);
 });
 
+// LIST experiment runs
+experimentsRoutes.get("/:id/runs", (c) => {
+  const id = parseId(c.req.param("id"), "experiment");
+  const runs = listRuns(id);
+  return c.json(runs, 200);
+});
 // GET experiment
 experimentsRoutes.get("/:id", (c) => {
   const id = parseId(c.req.param("id"), "experiment");
