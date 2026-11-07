@@ -1,4 +1,11 @@
-import type { Result, Run, RunDetail, RunState } from "@promptimize/shared";
+import {
+  isTerminalRun,
+  runStatuses,
+  type Result,
+  type Run,
+  type RunDetail,
+  type RunState,
+} from "@promptimize/shared";
 import { readExperiment } from "./experiments.service";
 import { readPrompt } from "./prompts.service";
 import { NotFoundError, ValidationError } from "../errors/domain";
@@ -228,7 +235,9 @@ function saveJudgeOutcomes(
 // stuck in a non-terminal state with no process to finish it. Call at boot,
 // after migrations and before serving, and return the ids that were buried.
 export function interruptLeftoverRuns(): number[] {
-  const nonTerminal: RunState[] = ["pending", "running", "stopping"];
+  // Derive from the single source of truth: adding a run status must not
+  // silently escape the boot sweep because this list was not updated.
+  const nonTerminal = runStatuses.filter((status) => !isTerminalRun(status));
   const buried = db
     .update(runs)
     .set({ status: "interrupted" })
