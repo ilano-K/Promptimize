@@ -127,6 +127,12 @@ export const experimentsApi = {
   remove: async (id: number): Promise<void> => {
     await request('DELETE', `/v1/experiments/${id}`)
   },
+  /** Recreates a deleted prompt from the experiment's newest run snapshot and links it. */
+  restorePrompt: async (experimentId: number): Promise<Prompt> =>
+    promptSchema.parse(await request('POST', `/v1/experiments/${experimentId}/restore-prompt`)),
+  /** Recreates a deleted judge from the experiment's newest run snapshot and links it. */
+  restoreJudge: async (experimentId: number): Promise<Judge> =>
+    judgeSchema.parse(await request('POST', `/v1/experiments/${experimentId}/restore-judge`)),
 }
 
 export const runsApi = {

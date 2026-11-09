@@ -32,12 +32,15 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
     loadRuns: st.loadRuns,
     loadRun: st.loadRun,
     deleteExperiment: st.deleteExperiment,
+    restorePrompt: st.restorePrompt,
+    restoreJudge: st.restoreJudge,
   }))
   const e = s.experiments.find((x) => x.id === id)
   const [editing, setEditing] = useState<'exp' | 'prompt' | 'judge' | null>(null)
   const [optimizing, setOptimizing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [restoring, setRestoring] = useState<'prompt' | 'judge' | null>(null)
 
   // Run history and results come from the server; polling continues in the store.
   useEffect(() => {
@@ -63,6 +66,24 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
   const run = runs.find((r) => r.id === runParam) ?? runs[0]
   const running = runs.some((r) => r.status === 'pending' || r.status === 'running' || r.status === 'stopping')
   const split = (l: Label) => ins.filter((i) => i.label === l).length
+  // Restoring needs a snapshot, so only offer it when the newest run has one.
+  const canRestorePrompt = !prompt && runs.length > 0
+  const canRestoreJudge = !judge && runs.length > 0 && Boolean(runs[0].snapshot.judge)
+
+  const restore = (kind: 'prompt' | 'judge') => {
+    if (restoring) return
+    setRestoring(kind)
+    void (async () => {
+      try {
+        if (kind === 'prompt') await s.restorePrompt(e.id)
+        else await s.restoreJudge(e.id)
+      } catch (err) {
+        alert(errorMessage(err))
+      } finally {
+        setRestoring(null)
+      }
+    })()
+  }
 
   const start = () => {
     if (starting) return
@@ -137,7 +158,19 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
               <pre className="mt-3 max-h-28 overflow-y-auto font-mono text-xs leading-relaxed whitespace-pre-wrap text-fg-2">{prompt.text}</pre>
             </>
           ) : (
-            <p className="text-sm text-warn">Missing prompt. Use Edit to pick another one from the library.</p>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-warn">Missing prompt. Restore the version the last run used, or pick another one from the library.</p>
+              <div className="flex flex-wrap gap-2">
+                {canRestorePrompt && (
+                  <Button size="sm" disabled={restoring !== null} onClick={() => restore('prompt')}>
+                    {restoring === 'prompt' ? 'Restoring…' : 'Restore from last run'}
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setEditing('exp')}>
+                  Pick another
+                </Button>
+              </div>
+            </div>
           )}
         </Panel>
         <Panel className="p-4">
@@ -164,7 +197,18 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
               </div>
             </>
           ) : (
-            <p className="text-sm text-fg-2">No judge. This experiment only generates outputs; add one to score them.</p>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-fg-2">
+                {canRestoreJudge
+                  ? 'Missing judge. Restore the version the last run used, or add one to score outputs.'
+                  : 'No judge. This experiment only generates outputs; add one to score them.'}
+              </p>
+              {canRestoreJudge && (
+                <Button size="sm" disabled={restoring !== null} onClick={() => restore('judge')}>
+                  {restoring === 'judge' ? 'Restoring…' : 'Restore from last run'}
+                </Button>
+              )}
+            </div>
           )}
         </Panel>
         <Panel className="p-4">

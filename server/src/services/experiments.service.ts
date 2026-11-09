@@ -2,76 +2,111 @@ import type {
   CreateExperimentBody,
   Experiment,
   ExperimentUsedBy,
+  Judge,
+  Prompt,
   UpdateExperimentBody,
 } from "@promptimize/shared";
 import { db } from "../db";
 import { experiment_inputs, experiments } from "../db/schemas/experiments";
 import { desc, eq, inArray } from "drizzle-orm";
-import { NotFoundError } from "../errors/domain";
+import {
+  DuplicateNameError,
+  ModelNotConfiguredError,
+  NotFoundError,
+  ValidationError,
+} from "../errors/domain";
 import { readProject } from "./projects.service";
-import { readPrompt } from "./prompts.service";
-import { readJudge } from "./judges.service";
+import { createPrompt, readPrompt } from "./prompts.service";
+import { createJudge, readJudge } from "./judges.service";
 import { readInput } from "./inputs.service";
+import { listRuns } from "./runs.service";
 
-// helper to get linked ids
-type ExperimentRow = typeof experiments.$inferSelect;
-const EMPTY_USED_BY: ExperimentUsedBy = {
-  runs: [],
-  optimizeLoops: [],
-};
+// RESTORE prompt object from the experiment's most recent snapshot
+export function restorePrompt(experimentId: number): Prompt {
+  const experiment = readExperiment(experimentId);
+  const snapshot = latestSnapshot(experimentId);
+  const prompt = snapshot.prompt;
 
-function dbToDomain(
-  row: ExperimentRow,
-  {
-    inputIds = [],
-    usedBy = EMPTY_USED_BY,
-  }: { inputIds?: number[]; usedBy?: ExperimentUsedBy } = {},
-): Experiment {
-  return {
-    id: row.id,
-    name: row.name,
-    projectId: row.projectId,
-    promptId: row.promptId,
-    judgeId: row.judgeId,
-    createdAt: row.createdAt,
-    inputIds,
-    usedBy,
-  };
+  const created = createFromSnapshot(
+    () =>
+      createPrompt(experiment.projectId, {
+        ...prompt,
+        // snapshots store "no schema" as null; create bodies expect it absent
+        outputSchema: prompt.outputSchema ?? undefined,
+      }),
+    "prompt",
+    prompt.name,
+    prompt.model,
+  );
+
+  editExperiment(experimentId, { promptId: created.id });
+  return created;
 }
 
-function getInputIdsFor(experimentIds: number[]): Map<number, number[]> {
-  if (experimentIds.length === 0) return new Map();
+// RESTORE judge object from the experiment's most recent snapshot
+export function restoreJudge(experimentId: number): Judge {
+  const experiment = readExperiment(experimentId);
+  const snapshot = latestSnapshot(experimentId);
+  const judge = snapshot.judge;
 
-  // [{ experiment_id: number, inputId: number},,,] if experimentIds match
-  const rows = db
-    .select({
-      experimentId: experiment_inputs.experimentId,
-      inputId: experiment_inputs.inputId,
-    })
-    .from(experiment_inputs)
-    .where(inArray(experiment_inputs.experimentId, experimentIds))
-    .all();
-
-  const map = new Map<number, number[]>();
-  for (const { experimentId, inputId } of rows) {
-    const list = map.get(experimentId);
-    if (list) list.push(inputId);
-    else map.set(experimentId, [inputId]);
+  // prompt-only runs have no judge, so there is nothing to restore
+  if (!judge) {
+    throw new ValidationError(
+      `The latest run of experiment ${experimentId} has no judge to restore from.`,
+    );
   }
-  return map;
+
+  const created = createFromSnapshot(
+    () => createJudge(experiment.projectId, judge),
+    "judge",
+    judge.name,
+    judge.model,
+  );
+
+  editExperiment(experimentId, { judgeId: created.id });
+  return created;
 }
 
-function getInputIdsMap(id: number): Map<number, number[]> {
-  return getInputIdsFor([id]);
+// ======================================================
+// === Snapshot of the experiment's newest run (if any) =
+// ======================================================
+function latestSnapshot(experimentId: number) {
+  const runs = listRuns(experimentId).sort(
+    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+  );
+
+  if (runs.length === 0) {
+    throw new ValidationError(
+      `Nothing to restore from: experiment ${experimentId} has never run.`,
+    );
+  }
+
+  return runs[0].snapshot;
 }
 
-function assertInProject(
-  entity: { projectId: number },
-  projectId: number,
-  label: string,
-  id: number,
-): void {
-  if (entity.projectId !== projectId) throw new NotFoundError(label, id);
+// CREATE the library object, translating the errors a restore can hit into
+// messages the user can act on at the restore button.
+function createFromSnapshot<T>(
+  create: () => T,
+  entity: "prompt" | "judge",
+  name: string,
+  model: string,
+): T {
+  try {
+    return create();
+  } catch (error) {
+    if (error instanceof DuplicateNameError) {
+      throw new ValidationError(
+        `A ${entity} named "${name}" already exists; rename it, then restore again.`,
+      );
+    }
+    if (error instanceof ModelNotConfiguredError) {
+      throw new ValidationError(
+        `The run's ${entity} used model "${model}", which is no longer configured; add it in Settings, then restore again.`,
+      );
+    }
+    throw error;
+  }
 }
 
 // LIST experiments
@@ -215,4 +250,65 @@ export function editExperiment(
 export function deleteExperiment(id: number) {
   readExperiment(id);
   db.delete(experiments).where(eq(experiments.id, id)).run();
+}
+
+// helper to get linked ids
+type ExperimentRow = typeof experiments.$inferSelect;
+const EMPTY_USED_BY: ExperimentUsedBy = {
+  runs: [],
+  optimizeLoops: [],
+};
+
+function dbToDomain(
+  row: ExperimentRow,
+  {
+    inputIds = [],
+    usedBy = EMPTY_USED_BY,
+  }: { inputIds?: number[]; usedBy?: ExperimentUsedBy } = {},
+): Experiment {
+  return {
+    id: row.id,
+    name: row.name,
+    projectId: row.projectId,
+    promptId: row.promptId,
+    judgeId: row.judgeId,
+    createdAt: row.createdAt,
+    inputIds,
+    usedBy,
+  };
+}
+
+function getInputIdsFor(experimentIds: number[]): Map<number, number[]> {
+  if (experimentIds.length === 0) return new Map();
+
+  // [{ experiment_id: number, inputId: number},,,] if experimentIds match
+  const rows = db
+    .select({
+      experimentId: experiment_inputs.experimentId,
+      inputId: experiment_inputs.inputId,
+    })
+    .from(experiment_inputs)
+    .where(inArray(experiment_inputs.experimentId, experimentIds))
+    .all();
+
+  const map = new Map<number, number[]>();
+  for (const { experimentId, inputId } of rows) {
+    const list = map.get(experimentId);
+    if (list) list.push(inputId);
+    else map.set(experimentId, [inputId]);
+  }
+  return map;
+}
+
+function getInputIdsMap(id: number): Map<number, number[]> {
+  return getInputIdsFor([id]);
+}
+
+function assertInProject(
+  entity: { projectId: number },
+  projectId: number,
+  label: string,
+  id: number,
+): void {
+  if (entity.projectId !== projectId) throw new NotFoundError(label, id);
 }
