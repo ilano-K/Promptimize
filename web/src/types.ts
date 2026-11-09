@@ -73,9 +73,15 @@ export interface Result {
   status: ResultStatus
   output?: string
   judge?: Record<string, JudgeValue>
+  /** Why the judge could not score this output; null when it did. */
+  judgeError?: string | null
 }
 
-export type RunStatus = 'running' | 'done' | 'judge_error' | 'stopped'
+/**
+ * The server's run states. `judge_error` and `stopped` are only used by the
+ * still-simulated optimize loops; real runs never leave the server's set.
+ */
+export type RunStatus = 'pending' | 'running' | 'stopping' | 'done' | 'cancelled' | 'interrupted' | 'failed' | 'judge_error' | 'stopped'
 
 export interface Run {
   id: string

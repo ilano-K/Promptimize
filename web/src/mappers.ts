@@ -12,12 +12,15 @@ import type {
   JsonSchema,
   Judge as ApiJudge,
   Prompt as ApiPrompt,
+  Run as ApiRun,
+  RunDetail as ApiRunDetail,
+  Snapshot as ApiSnapshot,
   UpdateExperimentBody,
   UpdateInputBody,
   UpdateJudgeBody,
   UpdatePromptBody,
 } from '@promptimize/shared'
-import type { Experiment, Input, Judge, Prompt } from './types'
+import type { Experiment, Input, Judge, Prompt, Run, Snapshot } from './types'
 
 const id = (n: number) => String(n)
 
@@ -142,4 +145,65 @@ export function experimentToCreate(x: Experiment): CreateExperimentBody {
 
 export function experimentToUpdate(x: Experiment): UpdateExperimentBody {
   return experimentBody(x)
+}
+
+// ---- Runs ----
+// Runs live on the server. The screen keeps its string ids and text schema so
+// the simulated optimize loops can share the same shapes.
+
+function snapshotFromApi(x: ApiSnapshot): Snapshot {
+  const providers: NonNullable<Snapshot['providers']> = {}
+  for (const model of Object.values(x.models)) {
+    providers[model.providerId] = { kind: model.kind, baseUrl: model.baseUrl }
+  }
+
+  return {
+    prompt: {
+      id: '',
+      projectId: '',
+      name: x.prompt.name,
+      text: x.prompt.text,
+      model: x.prompt.model,
+      outputSchema: x.prompt.outputSchema ? JSON.stringify(x.prompt.outputSchema, null, 2) : '',
+    },
+    // The snapshot has no input names: results point at the input's key, and
+    // the text the model saw is what the screen shows.
+    inputs: x.inputs.map((i) => ({ id: i.key, projectId: '', name: `Input ${i.key}`, content: i.content, label: i.label })),
+    judge: x.judge
+      ? {
+          id: '',
+          projectId: '',
+          name: x.judge.name,
+          basePrompt: x.judge.basePrompt,
+          characteristics: x.judge.characteristics.map((c, i) => ({ id: `${i}`, name: c.name, type: c.type })),
+          mode: x.judge.mode,
+          model: x.judge.model,
+        }
+      : null,
+    providers,
+  }
+}
+
+/** Maps a run, with results when the server sent the detail shape. */
+export function runFromApi(x: ApiRun | ApiRunDetail): Run {
+  const detail = 'results' in x ? x : null
+
+  return {
+    id: id(x.id),
+    experimentId: id(x.experimentId),
+    snapshot: snapshotFromApi(x.snapshot),
+    results: (detail?.results ?? []).map((r) => ({
+      inputKey: r.snapshotInputKey,
+      status: r.status,
+      output: r.output,
+      judge: r.judgeResults ?? undefined,
+      judgeError: r.judgeError,
+    })),
+    status: x.status,
+    error: x.error ?? undefined,
+    startedAt: Date.parse(x.startedAt),
+    loopId: x.loopId === null ? undefined : id(x.loopId),
+    round: x.round ?? undefined,
+    kind: 'run',
+  }
 }

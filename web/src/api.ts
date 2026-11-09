@@ -7,6 +7,8 @@ import {
   judge as judgeSchema,
   project,
   prompt as promptSchema,
+  run as runSchema,
+  runDetail,
 } from '@promptimize/shared'
 import type {
   ApiErrorBody,
@@ -23,6 +25,8 @@ import type {
   Project,
   Prompt,
   ProviderConnectionBody,
+  Run,
+  RunDetail,
   SafeProvider,
   Settings,
   TestConnectionResponse,
@@ -123,6 +127,19 @@ export const experimentsApi = {
   remove: async (id: number): Promise<void> => {
     await request('DELETE', `/v1/experiments/${id}`)
   },
+}
+
+export const runsApi = {
+  /** History for one experiment. Runs come back without their results. */
+  list: async (experimentId: number): Promise<Run[]> =>
+    runSchema.array().parse(await request('GET', `/v1/experiments/${experimentId}/runs`)),
+  /** Starts a run in the background on the server and returns it in `pending`. */
+  start: async (experimentId: number): Promise<Run> =>
+    runSchema.parse(await request('POST', `/v1/experiments/${experimentId}/runs`)),
+  /** Poll target: the run with its saved results and progress counters. */
+  get: async (id: number): Promise<RunDetail> => runDetail.parse(await request('GET', `/v1/runs/${id}`)),
+  retryJudging: async (id: number): Promise<RunDetail> => runDetail.parse(await request('POST', `/v1/runs/${id}/retry-judging`)),
+  stop: async (id: number): Promise<RunDetail> => runDetail.parse(await request('POST', `/v1/runs/${id}/stop`)),
 }
 
 export const settingsApi = {
