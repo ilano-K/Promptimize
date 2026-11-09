@@ -13,7 +13,7 @@ import {
   deleteProject,
   readProject,
   listProjects,
-  updateProject,
+  editProject,
 } from "../services/projects.service";
 import { createPrompt, listPrompts } from "../services/prompts.service";
 import { parseId } from "../lib/parse-id";
@@ -50,7 +50,7 @@ projectRoutes.get("/:id", async (c) => {
 projectRoutes.patch("/:id", validateJson(updateProjectBody), async (c) => {
   const id = parseId(c.req.param("id"), "project");
   const data = c.req.valid("json");
-  const project = updateProject(id, data);
+  const project = editProject(id, data);
   return c.json(project, 200);
 });
 
