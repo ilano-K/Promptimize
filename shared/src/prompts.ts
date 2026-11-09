@@ -14,7 +14,7 @@ export const createPromptBody = z.object({
   name: z.string().trim().min(1).max(100),
   text: z.string().trim().min(1),
   model: z.string().trim().min(1).max(100),
-  outputSchema: jsonSchema.optional(),
+  outputSchema: jsonSchema.optional().nullable(),
 });
 
 export const updatePromptBody = z

@@ -85,6 +85,10 @@ interface Actions {
   deleteObject: (kind: 'input' | 'prompt' | 'judge', id: string) => Promise<void>
   saveExperiment: (e: Experiment) => Promise<Experiment>
   deleteExperiment: (id: string) => Promise<void>
+  /** Recreates the experiment's deleted prompt from its newest run snapshot. */
+  restorePrompt: (experimentId: string) => Promise<Prompt>
+  /** Recreates the experiment's deleted judge from its newest run snapshot. */
+  restoreJudge: (experimentId: string) => Promise<Judge>
   /** Starts a run on the server, then polls it until it is terminal. */
   startRun: (experimentId: string) => Promise<string>
   retryJudge: (runId: string) => Promise<void>
@@ -449,6 +453,24 @@ export const useStore = create<Data & Actions>()(
             runs: s.runs.filter((r) => r.experimentId !== id),
             loops: s.loops.filter((l) => l.experimentId !== id),
           }))
+        },
+
+        restorePrompt: async (experimentId) => {
+          const restored = promptFromApi(await experimentsApi.restorePrompt(Number(experimentId)))
+          set((s) => ({
+            prompts: upsert(s.prompts, restored),
+            // The server linked it to this experiment; mirror that here.
+            experiments: s.experiments.map((e) => (e.id === experimentId ? { ...e, promptId: restored.id } : e)),
+          }))
+          return restored
+        },
+        restoreJudge: async (experimentId) => {
+          const restored = judgeFromApi(await experimentsApi.restoreJudge(Number(experimentId)))
+          set((s) => ({
+            judges: upsert(s.judges, restored),
+            experiments: s.experiments.map((e) => (e.id === experimentId ? { ...e, judgeId: restored.id } : e)),
+          }))
+          return restored
         },
 
         startRun: async (experimentId) => {

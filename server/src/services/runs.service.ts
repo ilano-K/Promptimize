@@ -27,7 +27,7 @@ import {
 } from "../jobs/runs";
 
 // ===============================
-// === Retrieve and return run ===
+// === READ a SINGLE run ===
 // ===============================
 export function readRun(runId: number): Run {
   const run = db.select().from(runs).where(eq(runs.id, runId)).get();
@@ -38,7 +38,7 @@ export function readRun(runId: number): Run {
 }
 
 // ================================
-// === Retrieve and return runs ===
+// ===== LIST EXPERIMENT runs =====
 // ================================
 
 export function listRuns(experimentId: number): Run[] {
@@ -53,7 +53,7 @@ export function listRuns(experimentId: number): Run[] {
 }
 
 // ========================================================
-// === Retrieve and parses details of a run, returns it ===
+// ===== Read run, results, and aggregated progress =======
 // ========================================================
 export function readRunDetail(runId: number): RunDetail {
   const run = readRun(runId);
@@ -83,7 +83,7 @@ export function readRunDetail(runId: number): RunDetail {
 }
 
 // ==============================================================
-// === Retries the inputs where error occured during judging. ===
+// === Retries the inputs where error occured during judging ====
 // ==============================================================
 export async function retryJudging(runId: number): Promise<void> {
   const run = readRun(runId);
@@ -144,9 +144,9 @@ async function executeJudging(runId: number, resultsToRetry: Result[]) {
   setStatus(runId, isStopRequested(runId) ? "cancelled" : "done");
 }
 
-// ===================
-// === START a run ===
-// ===================
+// ============================
+// === MARK run as started  ===
+// ============================
 export function startRun(experimentId: number): Run {
   const experiment = readExperiment(experimentId);
 
@@ -186,9 +186,9 @@ export function startRun(experimentId: number): Run {
   return run;
 }
 
-// ==================
-// === STOP a run ===
-// ==================
+// ===========================
+// === MARK run as stopped ===
+// ===========================
 export function stopRun(runId: number): boolean {
   const run = readRun(runId);
   // CHECK if the state is TERMINAL -> leave the state untouched
@@ -206,9 +206,9 @@ export function stopRun(runId: number): boolean {
   return true;
 }
 
-// =========================================
-// === EXECUTE a run; used by `startRun` ===
-// =========================================
+// ===================================================
+// === EXECUTE a run (responsive to stop requests) ===
+// ===================================================
 export async function executeRun(runId: number): Promise<void> {
   // SAVE LLM outputs used by judge runs
   const pendingOutputs: { resultId: number; output: string }[] = [];
@@ -303,10 +303,9 @@ function saveJudgeOutcomes(
 }
 
 // ==========================================================================
-// === PROCESS runs that were interrupted with no process to finish it by ===
-// ============ having each run `status` SET to `interrupted` ===============
+// ==== PROCESS runs that were interrupted with no process to finish it  ====
+// ========= by having each run `status` SET to `interrupted` ===============
 // ==========================================================================
-
 export function interruptLeftoverRuns(): number[] {
   const nonTerminal = runStatuses.filter((status) => !isTerminalRun(status));
   const buried = db
@@ -320,7 +319,7 @@ export function interruptLeftoverRuns(): number[] {
 
 // =============================================
 // == `onError` functions used by `queueRun` ===
-
+// =============================================
 export function markRunFailed(runId: number, error: unknown): void {
   // logs run error, and UPDATE run `status` to failed and `message` to error message
   const message = failureMessage(error);

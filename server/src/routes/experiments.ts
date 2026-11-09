@@ -3,6 +3,8 @@ import {
   deleteExperiment,
   editExperiment,
   readExperiment,
+  restoreJudge,
+  restorePrompt,
 } from "../services/experiments.service";
 import { parseId } from "../lib/parse-id";
 import { validateJson } from "../lib/validate";
@@ -52,3 +54,18 @@ experimentsRoutes.delete("/:id", (c) => {
   deleteExperiment(id);
   return c.body(null, 204);
 });
+
+// RESTORE prompt object from experiment snapshot
+experimentsRoutes.post("/:id/restore-prompt", (c) => {
+  const id = parseId(c.req.param("id"), "experiment");
+  const prompt = restorePrompt(id);
+  return c.json(prompt, 201);
+});
+
+// RESTORE judge object from experiment snapshot
+experimentsRoutes.post("/:id/restore-judge", (c) => {
+  const id = parseId(c.req.param("id"), "experiment");
+  const judge = restoreJudge(id);
+  return c.json(judge, 201);
+});
+

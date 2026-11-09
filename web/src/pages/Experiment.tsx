@@ -1,5 +1,5 @@
 import { ArrowClockwise, ArrowLeft, Columns, PencilSimple, Play, Sparkle, Stop, Trash, WarningCircle } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { JudgeEditor, PromptEditor } from '../components/editors'
 import { Button, Empty, Field, inputCls, LabelTag, Modal, ModelSelect, PageHeader, Panel, Score, Tag, textareaCls } from '../components/ui'
 import { errorMessage, timeAgo } from '../components/ui.helpers'
@@ -10,10 +10,14 @@ import type { Experiment as Exp, Label, Run, RunStatus } from '../types'
 import { ExperimentForm } from './Experiments'
 
 export function RunStatusTag({ status }: { status: RunStatus }) {
+  if (status === 'pending') return <Tag tone="accent">Queued</Tag>
   if (status === 'running') return <Tag tone="accent">Running</Tag>
+  if (status === 'stopping') return <Tag tone="warn">Stopping</Tag>
   if (status === 'done') return <Tag>Done</Tag>
   if (status === 'judge_error') return <Tag tone="danger">Judge error</Tag>
-  return <Tag tone="warn">Stopped</Tag>
+  if (status === 'failed') return <Tag tone="danger">Failed</Tag>
+  if (status === 'interrupted') return <Tag tone="warn">Interrupted</Tag>
+  return <Tag tone="warn">Cancelled</Tag>
 }
 
 export function Experiment({ id, runParam }: { id: string; runParam?: string }) {
@@ -25,12 +29,30 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
     runs: st.runs,
     loops: st.loops,
     startRun: st.startRun,
+    loadRuns: st.loadRuns,
+    loadRun: st.loadRun,
     deleteExperiment: st.deleteExperiment,
+    restorePrompt: st.restorePrompt,
+    restoreJudge: st.restoreJudge,
   }))
   const e = s.experiments.find((x) => x.id === id)
   const [editing, setEditing] = useState<'exp' | 'prompt' | 'judge' | null>(null)
   const [optimizing, setOptimizing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [restoring, setRestoring] = useState<'prompt' | 'judge' | null>(null)
+
+  // Run history and results come from the server; polling continues in the store.
+  useEffect(() => {
+    if (!e) return
+    void s.loadRuns(e.id).catch(() => {})
+  }, [e?.id, s.loadRuns])
+
+  // Selecting an older run fetches its results if they aren't loaded yet.
+  useEffect(() => {
+    if (!runParam) return
+    void s.loadRun(runParam).catch(() => {})
+  }, [runParam, s.loadRun])
 
   if (!e) {
     return <Empty icon={<WarningCircle size={28} />} title="Experiment not found" body="It may have been deleted." action={<Button onClick={() => go('experiments')}>Back to experiments</Button>} />
@@ -42,8 +64,41 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
   const runs = s.runs.filter((r) => r.experimentId === e.id && !r.loopId).sort((a, b) => b.startedAt - a.startedAt)
   const loops = s.loops.filter((l) => l.experimentId === e.id).sort((a, b) => b.startedAt - a.startedAt)
   const run = runs.find((r) => r.id === runParam) ?? runs[0]
-  const running = runs.some((r) => r.status === 'running')
+  const running = runs.some((r) => r.status === 'pending' || r.status === 'running' || r.status === 'stopping')
   const split = (l: Label) => ins.filter((i) => i.label === l).length
+  // Restoring needs a snapshot, so only offer it when the newest run has one.
+  const canRestorePrompt = !prompt && runs.length > 0
+  const canRestoreJudge = !judge && runs.length > 0 && Boolean(runs[0].snapshot.judge)
+
+  const restore = (kind: 'prompt' | 'judge') => {
+    if (restoring) return
+    setRestoring(kind)
+    void (async () => {
+      try {
+        if (kind === 'prompt') await s.restorePrompt(e.id)
+        else await s.restoreJudge(e.id)
+      } catch (err) {
+        alert(errorMessage(err))
+      } finally {
+        setRestoring(null)
+      }
+    })()
+  }
+
+  const start = () => {
+    if (starting) return
+    setStarting(true)
+    void (async () => {
+      try {
+        const id = await s.startRun(e.id)
+        go(`experiments/${e.id}?run=${id}`)
+      } catch (err) {
+        alert(errorMessage(err))
+      } finally {
+        setStarting(false)
+      }
+    })()
+  }
 
   // Tell the user when the library changed since the last run's snapshot.
   const changed: string[] = []
@@ -81,7 +136,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
             <Button onClick={() => setOptimizing(true)} disabled={!prompt || !judge || running}>
               <Sparkle size={15} /> Optimize
             </Button>
-            <Button variant="primary" disabled={running || !prompt} onClick={() => go(`experiments/${e.id}?run=${s.startRun(e.id)}`)}>
+            <Button variant="primary" disabled={running || starting || !prompt} onClick={start}>
               <Play size={15} weight="fill" /> Run
             </Button>
           </>
@@ -103,7 +158,19 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
               <pre className="mt-3 max-h-28 overflow-y-auto font-mono text-xs leading-relaxed whitespace-pre-wrap text-fg-2">{prompt.text}</pre>
             </>
           ) : (
-            <p className="text-sm text-warn">Missing prompt. Use Edit to pick another one from the library.</p>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-warn">Missing prompt. Restore the version the last run used, or pick another one from the library.</p>
+              <div className="flex flex-wrap gap-2">
+                {canRestorePrompt && (
+                  <Button size="sm" disabled={restoring !== null} onClick={() => restore('prompt')}>
+                    {restoring === 'prompt' ? 'Restoring…' : 'Restore from last run'}
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setEditing('exp')}>
+                  Pick another
+                </Button>
+              </div>
+            </div>
           )}
         </Panel>
         <Panel className="p-4">
@@ -130,7 +197,18 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
               </div>
             </>
           ) : (
-            <p className="text-sm text-fg-2">No judge. This experiment only generates outputs; add one to score them.</p>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-fg-2">
+                {canRestoreJudge
+                  ? 'Missing judge. Restore the version the last run used, or add one to score outputs.'
+                  : 'No judge. This experiment only generates outputs; add one to score them.'}
+              </p>
+              {canRestoreJudge && (
+                <Button size="sm" disabled={restoring !== null} onClick={() => restore('judge')}>
+                  {restoring === 'judge' ? 'Restoring…' : 'Restore from last run'}
+                </Button>
+              )}
+            </div>
           )}
         </Panel>
         <Panel className="p-4">
@@ -196,7 +274,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
             title="Not run yet"
             body="A run sends every input to the prompt and saves a snapshot of exactly what was used."
             action={
-              <Button variant="primary" disabled={!prompt || !judge} onClick={() => go(`experiments/${e.id}?run=${s.startRun(e.id)}`)}>
+              <Button variant="primary" disabled={!prompt || starting} onClick={start}>
                 <Play size={15} weight="fill" /> Run experiment
               </Button>
             }
@@ -239,10 +317,15 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
 export function RunView({ run, compact }: { run: Run; compact?: boolean }) {
   const { retryJudge, stopRun } = useStoreShallow((st) => ({ retryJudge: st.retryJudge, stopRun: st.stopRun }))
   const judge = run.snapshot.judge
-  const done = run.results.filter((r) => r.output).length
+  const total = run.snapshot.inputs.length
+  const done = run.results.length
   const judged = run.results.filter((r) => r.status === 'judged').length
-  const total = run.results.length
+  const judgeErrors = run.results.filter((r) => r.status === 'judge_error').length
   const avg = averages(run)
+  const active = run.status === 'pending' || run.status === 'running' || run.status === 'stopping'
+  const stopped = run.status === 'cancelled' || run.status === 'interrupted' || run.status === 'stopped'
+  const retry = () => void retryJudge(run.id).catch((err) => alert(errorMessage(err)))
+  const stop = () => void stopRun(run.id).catch((err) => alert(errorMessage(err)))
 
   return (
     <div className="flex flex-col gap-4">
@@ -266,38 +349,51 @@ export function RunView({ run, compact }: { run: Run; compact?: boolean }) {
               {judge && ` / judge ${judge.model}`}
             </span>
           )}
-          {run.status === 'running' && (
-            <Button size="sm" onClick={() => stopRun(run.id)}>
-              <Stop size={13} weight="fill" /> Stop
+          {run.status === 'stopping' ? (
+            <Button size="sm" disabled>
+              <Stop size={13} weight="fill" /> Stopping…
             </Button>
+          ) : (
+            (run.status === 'pending' || run.status === 'running') && (
+              <Button size="sm" onClick={stop}>
+                <Stop size={13} weight="fill" /> Stop
+              </Button>
+            )
           )}
         </div>
-        {run.status === 'running' && (
+        {active && (
           <div className="h-0.5 w-full overflow-hidden rounded-full">
             <div className="h-full bg-accent transition-[width] duration-300" style={{ width: `${((done + judged) / (total * (judge ? 2 : 1))) * 100}%` }} />
           </div>
         )}
       </Panel>
 
-      {run.status === 'judge_error' && (
+      {(run.status === 'judge_error' || (judgeErrors > 0 && !active)) && (
         <div className="flex flex-col gap-3 rounded-[10px] border border-danger/30 bg-danger-soft px-5 py-4 sm:flex-row sm:items-center">
           <WarningCircle size={20} className="shrink-0 text-danger" />
           <div className="flex-1 text-sm">
             <p className="font-medium text-danger">The judge's response couldn't be parsed.</p>
-            <p className="mt-0.5 text-fg-2">{run.error} Retrying only re-runs the judge step.</p>
+            <p className="mt-0.5 text-fg-2">
+              {run.status === 'judge_error'
+                ? `${run.error} `
+                : `${judgeErrors} output${judgeErrors > 1 ? 's were' : ' was'} not judged; the outputs were kept. `}
+              Retrying only re-runs the judge step.
+            </p>
           </div>
-          <Button onClick={() => retryJudge(run.id)}>
+          <Button onClick={retry}>
             <ArrowClockwise size={15} /> Retry judge step
           </Button>
         </div>
       )}
-      {run.status === 'stopped' && run.error && <p className="text-[13px] text-warn">{run.error}</p>}
+      {run.error && run.status !== 'judge_error' && (
+        <p className={`text-[13px] ${run.status === 'failed' ? 'text-danger' : 'text-warn'}`}>{run.error}</p>
+      )}
 
       <ul className="flex flex-col gap-2">
-        {run.results.map((r) => {
-          const input = run.snapshot.inputs.find((i) => i.id === r.inputKey)!
+        {run.snapshot.inputs.map((input) => {
+          const r = run.results.find((x) => x.inputKey === input.id)
           return (
-            <li key={r.inputKey} className={`grid gap-4 rounded-[10px] border border-line bg-surface p-4 ${judge ? 'lg:grid-cols-[0.9fr_1.3fr_1fr]' : 'lg:grid-cols-[0.9fr_2fr]'}`}>
+            <li key={input.id} className={`grid gap-4 rounded-[10px] border border-line bg-surface p-4 ${judge ? 'lg:grid-cols-[0.9fr_1.3fr_1fr]' : 'lg:grid-cols-[0.9fr_2fr]'}`}>
               <div className="min-w-0">
                 <div className="mb-1.5 flex items-center gap-2">
                   <span className="text-sm font-medium">{input.name}</span>
@@ -307,23 +403,25 @@ export function RunView({ run, compact }: { run: Run; compact?: boolean }) {
               </div>
               <div className="min-w-0">
                 <span className="mb-1.5 block text-xs text-fg-3">Output</span>
-                {r.output ? (
+                {r?.output ? (
                   <pre className="font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-fg">{r.output}</pre>
-                ) : r.status === 'generating' ? (
+                ) : active || r?.status === 'generating' ? (
                   <Skeleton lines={3} />
                 ) : (
-                  <p className="text-[13px] text-fg-3">{run.status === 'stopped' ? 'Not generated (run stopped)' : 'Waiting'}</p>
+                  <p className="text-[13px] text-fg-3">{stopped ? 'Not generated (run stopped)' : 'Waiting'}</p>
                 )}
               </div>
               {judge && (
                 <div className="min-w-0">
                   <span className="mb-1.5 block text-xs text-fg-3">Judge</span>
-                  {r.status === 'judged' && r.judge ? (
+                  {r?.status === 'judged' && r.judge ? (
                     <JudgeResult values={r.judge} />
-                  ) : r.status === 'judging' ? (
+                  ) : r?.status === 'judging' ? (
                     <Skeleton lines={2} />
-                  ) : r.status === 'judge_error' ? (
+                  ) : r?.status === 'judge_error' ? (
                     <p className="text-[13px] text-danger">No verdict. Output kept.</p>
+                  ) : active && r?.output ? (
+                    <p className="text-[13px] text-fg-3">Judging…</p>
                   ) : (
                     <p className="text-[13px] text-fg-3">Waiting</p>
                   )}

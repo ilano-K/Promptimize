@@ -38,7 +38,7 @@ export function readProject(id: number): Project {
 }
 
 //  UPDATE project
-export function updateProject(id: number, data: UpdateProjectBody): Project {
+export function editProject(id: number, data: UpdateProjectBody): Project {
   try {
     const project = db
       .update(projects)
