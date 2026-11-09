@@ -1,14 +1,15 @@
-// All app state lives here. Projects, their library objects and experiments come
-// from the server; runs and optimize loops are still simulated in the browser
-// (the "model calls" come from sim.ts) and saved to localStorage so a reload
-// keeps them (runs in flight on reload are marked as stopped, like a server
-// restart marks them "interrupted").
+// All app state lives here. Projects, their library objects, experiments and
+// runs come from the server; optimize loops are still simulated in the browser
+// (the "model calls" come from sim.ts) and saved to localStorage. A run is
+// polled only while its status is non-terminal, so a reload shows the server's
+// state instead of losing it.
 
 import type { CreateProjectBody, CreateProviderBody, UpdateProjectBody, UpdateProviderBody } from '@promptimize/shared'
+import { isTerminalRun, type RunState } from '@promptimize/shared'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
-import { experimentsApi, inputsApi, judgesApi, projectsApi, promptsApi, settingsApi } from './api'
+import { experimentsApi, inputsApi, judgesApi, projectsApi, promptsApi, runsApi, settingsApi } from './api'
 import {
   experimentFromApi,
   experimentToCreate,
@@ -22,6 +23,7 @@ import {
   promptFromApi,
   promptToCreate,
   promptToUpdate,
+  runFromApi,
 } from './mappers'
 import { snapshotProviders } from './providers'
 import * as seed from './seed'
@@ -53,7 +55,10 @@ interface Data {
   prompts: Prompt[]
   judges: Judge[]
   experiments: Experiment[]
-  /** Runs and optimize loops are simulated here and saved in localStorage. */
+  /**
+   * Server runs plus the still-simulated optimize-loop runs. Server runs are
+   * refreshed by polling; only the latest result set per run is kept.
+   */
   runs: Run[]
   loops: OptimizeLoop[]
   settings: Settings
@@ -80,9 +85,14 @@ interface Actions {
   deleteObject: (kind: 'input' | 'prompt' | 'judge', id: string) => Promise<void>
   saveExperiment: (e: Experiment) => Promise<Experiment>
   deleteExperiment: (id: string) => Promise<void>
-  startRun: (experimentId: string) => string
-  retryJudge: (runId: string) => void
-  stopRun: (runId: string) => void
+  /** Starts a run on the server, then polls it until it is terminal. */
+  startRun: (experimentId: string) => Promise<string>
+  retryJudge: (runId: string) => Promise<void>
+  stopRun: (runId: string) => Promise<void>
+  /** Loads an experiment's run history (server) and polls the active ones. */
+  loadRuns: (experimentId: string) => Promise<void>
+  /** Fetches one run's results if they aren't in the store yet. */
+  loadRun: (runId: string) => Promise<void>
   startOptimize: (experimentId: string, cfg: OptimizeConfig) => string
   stopLoop: (loopId: string) => void
   runTest: (loopId: string, round: number) => void
@@ -113,6 +123,9 @@ const initial = (): Data => ({
 // Runs the user asked to stop. Checked between simulated steps.
 const stopRequested = new Set<string>()
 const judgeAttempts = new Map<string, number>()
+// Runs with an in-flight poll loop, and runs whose results are already loaded.
+const polling = new Set<string>()
+const loadedDetails = new Set<string>()
 
 export const useStore = create<Data & Actions>()(
   persist(
@@ -127,6 +140,38 @@ export const useStore = create<Data & Actions>()(
       const patchLoop = (id: string, fn: (l: OptimizeLoop) => OptimizeLoop) =>
         set((s) => ({ loops: s.loops.map((l) => (l.id === id ? fn(l) : l)) }))
       const getRun = (id: string) => get().runs.find((r) => r.id === id)!
+
+      const upsertRun = (run: Run) =>
+        set((s) => ({
+          runs: s.runs.some((r) => r.id === run.id) ? s.runs.map((r) => (r.id === run.id ? run : r)) : [...s.runs, run],
+        }))
+
+      /** GETs one run with its results and mirrors it into the store. */
+      async function fetchRun(runId: string) {
+        const run = runFromApi(await runsApi.get(Number(runId)))
+        loadedDetails.add(runId)
+        upsertRun(run)
+        return run
+      }
+
+      /** Keeps GETting a run once a second until its status is terminal. */
+      function pollRun(runId: string) {
+        if (polling.has(runId)) return
+        polling.add(runId)
+        void (async () => {
+          try {
+            let run = await fetchRun(runId)
+            while (!isTerminalRun(run.status as RunState)) {
+              await sleep(1000)
+              run = await fetchRun(runId)
+            }
+          } catch {
+            // The last state stays visible; opening the experiment retries.
+          } finally {
+            polling.delete(runId)
+          }
+        })()
+      }
 
       /** The judge step. Only touches results that have an output but no verdict. */
       async function judgeStep(runId: string) {
@@ -406,20 +451,66 @@ export const useStore = create<Data & Actions>()(
           }))
         },
 
-        startRun: (experimentId) => {
-          const id = createRun(experimentId)
-          void execute(id)
-          return id
+        startRun: async (experimentId) => {
+          const run = runFromApi(await runsApi.start(Number(experimentId)))
+          upsertRun(run)
+          pollRun(run.id)
+          return run.id
         },
-        retryJudge: (runId) => {
-          patchRun(runId, (r) => ({ ...r, status: 'running', error: undefined }))
-          void (async () => {
+        retryJudge: async (runId) => {
+          const current = get().runs.find((r) => r.id === runId)
+          // Simulated optimize-loop runs still use the local judge step.
+          if (current?.loopId) {
+            patchRun(runId, (r) => ({ ...r, status: 'running', error: undefined }))
             await judgeStep(runId)
             if (getRun(runId).status !== 'judge_error') patchRun(runId, (r) => ({ ...r, status: 'done' }))
-          })()
+            return
+          }
+
+          const run = runFromApi(await runsApi.retryJudging(Number(runId)))
+          loadedDetails.add(runId)
+          upsertRun(run)
+          pollRun(runId)
         },
-        stopRun: (runId) => {
-          stopRequested.add(runId)
+        stopRun: async (runId) => {
+          const current = get().runs.find((r) => r.id === runId)
+          // Loops are simulated, so their stop is the in-memory flag.
+          if (current?.loopId) {
+            stopRequested.add(runId)
+            return
+          }
+
+          const run = runFromApi(await runsApi.stop(Number(runId)))
+          loadedDetails.add(runId)
+          upsertRun(run)
+          pollRun(runId)
+        },
+
+        loadRuns: async (experimentId) => {
+          const runs = (await runsApi.list(Number(experimentId))).map((r) => runFromApi(r))
+          set((s) => {
+            // Keep the results another poll already fetched for the same runs.
+            const existing = new Map(s.runs.map((r) => [r.id, r]))
+            const merged = runs.map((r) => {
+              const loaded = existing.get(r.id)
+              return loaded && loaded.results.length > 0 ? { ...r, results: loaded.results } : r
+            })
+            return {
+              // Replace this experiment's server runs wholesale so deleted runs disappear.
+              runs: [...s.runs.filter((r) => r.loopId || r.experimentId !== experimentId), ...merged],
+            }
+          })
+
+          for (const run of runs) {
+            if (!isTerminalRun(run.status as RunState)) pollRun(run.id)
+          }
+          const newest = runs.sort((a, b) => b.startedAt - a.startedAt)[0]
+          if (newest && !polling.has(newest.id) && !loadedDetails.has(newest.id)) void fetchRun(newest.id).catch(() => {})
+        },
+        loadRun: async (runId) => {
+          if (loadedDetails.has(runId)) return
+          const run = await fetchRun(runId)
+          if (!isTerminalRun(run.status as RunState)) pollRun(runId)
         },
 
         startOptimize: (experimentId, cfg) => {
@@ -505,11 +596,13 @@ export const useStore = create<Data & Actions>()(
     },
     {
       name: 'promptimize-prototype',
-      version: 4,
+      version: 5,
       // v2 changed the provider shape (kind, models, base URL); older saves get the example providers.
       // v3 moved projects to the server; the old browser copies (string ids) are dropped.
       // v4 moved the library and experiments to the server; the seed-backed copies and
-      // the runs that snapshotted them are dropped. Runs/loops are still saved here.
+      // the runs that snapshotted them are dropped.
+      // v5 runs live on the server too, so the old simulated runs (and the loops that
+      // pointed at them) are dropped; runs are reloaded from the server per experiment.
       migrate: (state, version) => {
         const s = state as Data
         if (version < 2) s.settings = seed.settings
@@ -525,12 +618,18 @@ export const useStore = create<Data & Actions>()(
           s.runs = []
           s.loops = []
         }
+        if (version < 5) {
+          s.runs = []
+          s.loops = []
+        }
         return s
       },
       onRehydrateStorage: () => (state) => {
         if (!state) return
+        // Only simulated loop runs die with the tab. Server runs keep their
+        // status and are fetched again when their experiment is opened.
         state.runs = state.runs.map((r) =>
-          r.status === 'running' ? { ...r, status: 'stopped', error: 'Interrupted: the page was reloaded while this run was going.' } : r,
+          r.loopId && r.status === 'running' ? { ...r, status: 'stopped', error: 'Interrupted: the page was reloaded while this loop run was going.' } : r,
         )
         state.loops = state.loops.map((l) =>
           l.status === 'running' ? { ...l, status: 'stopped', stopReason: 'Interrupted: the page was reloaded.' } : l,
