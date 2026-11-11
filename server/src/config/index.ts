@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import envPaths from "env-paths";
 import type { Config } from "./schema";
 import { ConfigSchema } from "./schema";
+import { configDir } from "../lib/app-dirs";
 import z from "zod";
 
 // Per-user config folder. Holds API keys.
-const dir = envPaths("promptimize", { suffix: "" }).config;
+const dir = configDir;
 const file = path.join(dir, "config.json");
 
 // In-memory copy so routes never re-read the file. Set by loadConfig().
