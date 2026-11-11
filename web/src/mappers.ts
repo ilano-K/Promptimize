@@ -3,6 +3,8 @@
 // simulated locally, so they keep using the screen types.
 
 import type {
+  CompareTag,
+  Comparison as ApiComparison,
   CreateExperimentBody,
   CreateInputBody,
   CreateJudgeBody,
@@ -12,6 +14,7 @@ import type {
   JsonSchema,
   Judge as ApiJudge,
   Prompt as ApiPrompt,
+  Result as ApiResult,
   Run as ApiRun,
   RunDetail as ApiRunDetail,
   Snapshot as ApiSnapshot,
@@ -20,7 +23,7 @@ import type {
   UpdateJudgeBody,
   UpdatePromptBody,
 } from '@promptimize/shared'
-import type { Experiment, Input, Judge, Prompt, Run, Snapshot } from './types'
+import type { Experiment, Input, Judge, Label, Prompt, Result, Run, Snapshot } from './types'
 
 const id = (n: number) => String(n)
 
@@ -192,18 +195,56 @@ export function runFromApi(x: ApiRun | ApiRunDetail): Run {
     id: id(x.id),
     experimentId: id(x.experimentId),
     snapshot: snapshotFromApi(x.snapshot),
-    results: (detail?.results ?? []).map((r) => ({
-      inputKey: r.snapshotInputKey,
-      status: r.status,
-      output: r.output,
-      judge: r.judgeResults ?? undefined,
-      judgeError: r.judgeError,
-    })),
+    results: (detail?.results ?? []).map(resultFromApi),
     status: x.status,
     error: x.error ?? undefined,
     startedAt: Date.parse(x.startedAt),
     loopId: x.loopId === null ? undefined : id(x.loopId),
     round: x.round ?? undefined,
     kind: 'run',
+  }
+}
+
+/** One stored result as a screen result: the run id is implicit in its parent. */
+export function resultFromApi(r: ApiResult): Result {
+  return {
+    inputKey: r.snapshotInputKey,
+    status: r.status,
+    output: r.output,
+    judge: r.judgeResults ?? undefined,
+    judgeError: r.judgeError,
+  }
+}
+
+// ---- Compare ----
+
+/** One input's two results. A null side means that run never ran the input. */
+export interface CompareRowView {
+  inputKey: string
+  label: Label
+  content: string
+  a: Result | null
+  b: Result | null
+}
+
+export interface CompareView {
+  a: Run
+  b: Run
+  tags: CompareTag[]
+  rows: CompareRowView[]
+}
+
+export function comparisonFromApi(x: ApiComparison): CompareView {
+  return {
+    a: runFromApi(x.a),
+    b: runFromApi(x.b),
+    tags: x.tags,
+    rows: x.rows.map((r) => ({
+      inputKey: r.inputKey,
+      label: r.label,
+      content: r.content,
+      a: r.a ? resultFromApi(r.a) : null,
+      b: r.b ? resultFromApi(r.b) : null,
+    })),
   }
 }

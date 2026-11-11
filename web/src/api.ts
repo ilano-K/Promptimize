@@ -2,6 +2,7 @@
 // @promptimize/shared so the web app and the server can't drift apart.
 
 import {
+  comparison as comparisonSchema,
   experiment as experimentSchema,
   input as inputSchema,
   judge as judgeSchema,
@@ -12,6 +13,7 @@ import {
 } from '@promptimize/shared'
 import type {
   ApiErrorBody,
+  Comparison,
   CreateExperimentBody,
   CreateInputBody,
   CreateJudgeBody,
@@ -146,6 +148,12 @@ export const runsApi = {
   get: async (id: number): Promise<RunDetail> => runDetail.parse(await request('GET', `/v1/runs/${id}`)),
   retryJudging: async (id: number): Promise<RunDetail> => runDetail.parse(await request('POST', `/v1/runs/${id}/retry-judging`)),
   stop: async (id: number): Promise<RunDetail> => runDetail.parse(await request('POST', `/v1/runs/${id}/stop`)),
+}
+
+export const compareApi = {
+  /** Two runs side by side: snapshot differences and paired results. */
+  compare: async (runA: number, runB: number): Promise<Comparison> =>
+    comparisonSchema.parse(await request('GET', `/v1/compare?runA=${runA}&runB=${runB}`)),
 }
 
 export const settingsApi = {
