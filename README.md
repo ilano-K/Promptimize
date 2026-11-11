@@ -1,10 +1,8 @@
 # Promptimize
 
-A local app for finding a prompt that works instead of guessing at one.
+A local app for experimenting on different prompts for developing AI apps.
 
-You keep a prompt, the inputs you test it on, and an optional judge prompt that scores each output. Run the experiment, read the outputs and scores, edit the prompt, run it again, then compare the two runs. Every run records the setup it used, so a comparison shows exactly what changed between them.
-
-Everything runs on your machine. The only outbound calls go to the model providers you configure.
+Everything runs localy. The only outbound calls go to the model providers you configure.
 
 ## Requirements
 
