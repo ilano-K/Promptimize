@@ -1,9 +1,7 @@
 import { Hono } from "hono";
-import {
-  deleteJudge,
-  readJudge,
-  updateJudge,
-} from "../services/judges.service";
+import type { JudgeRead } from "@promptimize/shared";
+import { deleteJudge, readJudge, updateJudge } from "../services/judges.service";
+import { experimentsUsingJudge } from "../services/usage.service";
 import { parseId } from "../lib/parse-id";
 import { validateJson } from "../lib/validate";
 import { updateJudgeBody } from "@promptimize/shared";
@@ -13,7 +11,7 @@ export const judgesRoutes = new Hono();
 // GET judge
 judgesRoutes.get("/:id", (c) => {
   const id = parseId(c.req.param("id"), "judge");
-  const judge = readJudge(id);
+  const judge: JudgeRead = { ...readJudge(id), usedBy: experimentsUsingJudge(id) };
   return c.json(judge, 200);
 });
 

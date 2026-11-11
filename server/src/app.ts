@@ -11,6 +11,7 @@ import {
   experimentsRoutes,
   runsRoutes,
   compareRoutes,
+  usageRoutes,
 } from "./routes";
 
 export const app = new Hono();
@@ -30,5 +31,6 @@ app.route(`${prefix}/judges`, judgesRoutes);
 app.route(`${prefix}/experiments`, experimentsRoutes);
 app.route(`${prefix}/runs`, runsRoutes);
 app.route(`${prefix}/compare`, compareRoutes);
+app.route(`${prefix}/usage`, usageRoutes);
 
 app.get("/api/health", (c) => c.json<Health>({ ok: true }));

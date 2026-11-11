@@ -6,3 +6,4 @@ export * from "./judges";
 export * from "./experiments";
 export * from "./runs";
 export * from "./compare";
+export * from "./usage";

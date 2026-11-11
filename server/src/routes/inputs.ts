@@ -1,18 +1,16 @@
 import { Hono } from "hono";
-import {
-  deleteInput,
-  readInput,
-  updateInput,
-} from "../services/inputs.service";
+import type { InputRead } from "@promptimize/shared";
+import { parseId } from "../lib/parse-id";
+import { deleteInput, readInput, updateInput } from "../services/inputs.service";
+import { experimentsUsingInput } from "../services/usage.service";
 import { validateJson } from "../lib/validate";
 import { updateInputBody } from "@promptimize/shared";
-import { parseId } from "../lib/parse-id";
 
 export const inputRoutes = new Hono();
 
 inputRoutes.get("/:id", (c) => {
   const id = parseId(c.req.param("id"), "input");
-  const input = readInput(id);
+  const input: InputRead = { ...readInput(id), usedBy: experimentsUsingInput(id) };
   return c.json(input, 200);
 });
 

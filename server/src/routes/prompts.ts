@@ -1,10 +1,8 @@
 import { Hono } from "hono";
+import type { PromptRead } from "@promptimize/shared";
 import { parseId } from "../lib/parse-id";
-import {
-  deletePrompt,
-  readPrompt,
-  updatePrompt,
-} from "../services/prompts.service";
+import { deletePrompt, readPrompt, updatePrompt } from "../services/prompts.service";
+import { experimentsUsingPrompt } from "../services/usage.service";
 import { validateJson } from "../lib/validate";
 import { updatePromptBody } from "@promptimize/shared";
 
@@ -13,7 +11,7 @@ export const promptsRoutes = new Hono();
 // GET prompt
 promptsRoutes.get("/:id", (c) => {
   const id = parseId(c.req.param("id"), "prompt");
-  const prompt = readPrompt(id);
+  const prompt: PromptRead = { ...readPrompt(id), usedBy: experimentsUsingPrompt(id) };
   return c.json(prompt, 200);
 });
 
