@@ -22,8 +22,10 @@ import type {
   UpdateInputBody,
   UpdateJudgeBody,
   UpdatePromptBody,
+  Usage as ApiUsage,
+  UsageRef as ApiUsageRef,
 } from '@promptimize/shared'
-import type { Experiment, Input, Judge, Label, Prompt, Result, Run, Snapshot } from './types'
+import type { Experiment, Input, Judge, Label, Prompt, Result, Run, Snapshot, Usage, UsageRef } from './types'
 
 const id = (n: number) => String(n)
 
@@ -246,5 +248,22 @@ export function comparisonFromApi(x: ApiComparison): CompareView {
       a: r.a ? resultFromApi(r.a) : null,
       b: r.b ? resultFromApi(r.b) : null,
     })),
+  }
+}
+
+// ---- Usage ----
+
+export function usageRefFromApi(x: ApiUsageRef): UsageRef {
+  return { id: id(x.id), name: x.name, projectId: id(x.projectId) }
+}
+
+export function usageFromApi(x: ApiUsage): Usage {
+  return {
+    models: Object.fromEntries(
+      Object.entries(x.models).map(([model, u]) => [
+        model,
+        { prompts: u.prompts.map(usageRefFromApi), judges: u.judges.map(usageRefFromApi) },
+      ]),
+    ),
   }
 }

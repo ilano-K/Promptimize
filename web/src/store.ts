@@ -727,12 +727,3 @@ export function useModelGroups(): ModelGroup[] {
 export function useDefaultModel(): string {
   return useModelGroups().flatMap((g) => g.models)[0]?.id ?? ''
 }
-
-/** Prompts and judges (in any project) that use a given model id. */
-export function modelUsage(s: { prompts: Prompt[]; judges: Judge[]; settings: Settings }, modelId: string) {
-  return {
-    prompts: s.prompts.filter((p) => p.model === modelId),
-    judges: s.judges.filter((j) => j.model === modelId),
-    optimizerDefault: s.settings.defaultOptimizerModel === modelId,
-  }
-}

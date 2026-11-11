@@ -1,10 +1,13 @@
 import { ArrowsClockwise, CheckCircle, Eye, EyeSlash, Key, PencilSimple, Plug, Plus, Trash, WarningCircle, X } from '@phosphor-icons/react'
 import type { CreateProviderBody, UpdateProviderBody } from '@promptimize/shared'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { usageApi } from '../api'
 import { Button, Empty, Field, inputCls, Modal, ModelSelect, PageHeader, Panel, Tag } from '../components/ui'
+import { errorMessage } from '../components/ui.helpers'
+import { usageFromApi } from '../mappers'
 import { fetchModels, kindInfo, PROVIDER_KINDS, slug, testConnection } from '../providers'
-import { modelUsage, useStoreShallow } from '../store'
-import type { Provider, ProviderKind } from '../types'
+import { useStoreShallow } from '../store'
+import type { Provider, ProviderKind, Usage } from '../types'
 
 export function Settings() {
   const { settings, updateSettings, resetDemo } = useStoreShallow((st) => ({
@@ -15,6 +18,25 @@ export function Settings() {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Provider | null>(null)
   const [keyFor, setKeyFor] = useState<Provider | null>(null)
+
+  // Which prompts and judges point at each model, fetched fresh: editing one
+  // of them elsewhere must show up before the next removal warning.
+  const [usage, setUsage] = useState<Usage | null>(null)
+  const [usageError, setUsageError] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    usageApi
+      .get()
+      .then((x) => {
+        if (live) setUsage(usageFromApi(x))
+      })
+      .catch((e) => {
+        if (live) setUsageError(errorMessage(e))
+      })
+    return () => {
+      live = false
+    }
+  }, [])
 
   return (
     <>
@@ -46,9 +68,14 @@ export function Settings() {
           ) : (
             <div className="flex flex-col gap-3">
               {settings.providers.map((p) => (
-                <ProviderCard key={p.id} provider={p} onEdit={() => setEditing(p)} onKey={() => setKeyFor(p)} />
+                <ProviderCard key={p.id} provider={p} usage={usage} onEdit={() => setEditing(p)} onKey={() => setKeyFor(p)} />
               ))}
             </div>
+          )}
+          {usageError && (
+            <p role="alert" className="mt-3 text-xs text-danger">
+              Couldn't check which models are in use: {usageError}
+            </p>
           )}
           <p className="mt-3 text-xs text-fg-3">
             Keys are kept by the local server in <code className="font-mono">~/.promptimize/config.json</code>, outside any repo. The browser never stores them.
@@ -89,8 +116,6 @@ export function Settings() {
 function useProviders() {
   const s = useStoreShallow((st) => ({
     settings: st.settings,
-    prompts: st.prompts,
-    judges: st.judges,
     addProvider: st.addProvider,
     updateProvider: st.updateProvider,
     removeProvider: st.removeProvider,
@@ -123,7 +148,17 @@ function StatusLine({ status }: { status: Status }) {
   )
 }
 
-function ProviderCard({ provider: p, onEdit, onKey }: { provider: Provider; onEdit: () => void; onKey: () => void }) {
+function ProviderCard({
+  provider: p,
+  usage,
+  onEdit,
+  onKey,
+}: {
+  provider: Provider
+  usage: Usage | null
+  onEdit: () => void
+  onKey: () => void
+}) {
   const { s, patch, remove } = useProviders()
   const info = kindInfo(p.kind)
   const [draft, setDraft] = useState('')
@@ -143,9 +178,11 @@ function ProviderCard({ provider: p, onEdit, onKey }: { provider: Provider; onEd
   }
 
   const usageText = (modelId: string) => {
-    const u = modelUsage(s, modelId)
-    const n = u.prompts.length + u.judges.length
-    return [n ? `${n} prompt${n === 1 ? '' : 's'}/judge${n === 1 ? '' : 's'}` : '', u.optimizerDefault ? 'default optimizer' : ''].filter(Boolean).join(', ')
+    const u = usage?.models[modelId]
+    const n = (u?.prompts.length ?? 0) + (u?.judges.length ?? 0)
+    return [n ? `${n} prompt${n === 1 ? '' : 's'}/judge${n === 1 ? '' : 's'}` : '', usage && s.settings.defaultOptimizerModel === modelId ? 'default optimizer' : '']
+      .filter(Boolean)
+      .join(', ')
   }
 
   const removeModel = (m: string) => {

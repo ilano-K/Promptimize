@@ -5,11 +5,15 @@ import {
   comparison as comparisonSchema,
   experiment as experimentSchema,
   input as inputSchema,
+  inputRead as inputReadSchema,
   judge as judgeSchema,
+  judgeRead as judgeReadSchema,
   project,
   prompt as promptSchema,
+  promptRead as promptReadSchema,
   run as runSchema,
   runDetail,
+  usage as usageSchema,
 } from '@promptimize/shared'
 import type {
   ApiErrorBody,
@@ -23,9 +27,12 @@ import type {
   Experiment,
   FetchModelsResponse,
   Input,
+  InputRead,
   Judge,
+  JudgeRead,
   Project,
   Prompt,
+  PromptRead,
   ProviderConnectionBody,
   Run,
   RunDetail,
@@ -39,6 +46,7 @@ import type {
   UpdatePromptBody,
   UpdateProviderBody,
   UpdateSettingsBody,
+  Usage,
 } from '@promptimize/shared'
 
 export class ApiError extends Error {
@@ -86,6 +94,8 @@ export const projectsApi = {
 export const inputsApi = {
   list: async (projectId: number): Promise<Input[]> =>
     inputSchema.array().parse(await request('GET', `/v1/projects/${projectId}/inputs`)),
+  /** Read one, with the experiments that reference it. */
+  read: async (id: number): Promise<InputRead> => inputReadSchema.parse(await request('GET', `/v1/inputs/${id}`)),
   create: async (projectId: number, body: CreateInputBody): Promise<Input> =>
     inputSchema.parse(await request('POST', `/v1/projects/${projectId}/inputs`, body)),
   update: async (id: number, body: UpdateInputBody): Promise<Input> =>
@@ -98,6 +108,8 @@ export const inputsApi = {
 export const promptsApi = {
   list: async (projectId: number): Promise<Prompt[]> =>
     promptSchema.array().parse(await request('GET', `/v1/projects/${projectId}/prompts`)),
+  /** Read one, with the experiments that reference it. */
+  read: async (id: number): Promise<PromptRead> => promptReadSchema.parse(await request('GET', `/v1/prompts/${id}`)),
   create: async (projectId: number, body: CreatePromptBody): Promise<Prompt> =>
     promptSchema.parse(await request('POST', `/v1/projects/${projectId}/prompts`, body)),
   update: async (id: number, body: UpdatePromptBody): Promise<Prompt> =>
@@ -110,6 +122,8 @@ export const promptsApi = {
 export const judgesApi = {
   list: async (projectId: number): Promise<Judge[]> =>
     judgeSchema.array().parse(await request('GET', `/v1/projects/${projectId}/judges`)),
+  /** Read one, with the experiments that reference it. */
+  read: async (id: number): Promise<JudgeRead> => judgeReadSchema.parse(await request('GET', `/v1/judges/${id}`)),
   create: async (projectId: number, body: CreateJudgeBody): Promise<Judge> =>
     judgeSchema.parse(await request('POST', `/v1/projects/${projectId}/judges`, body)),
   update: async (id: number, body: UpdateJudgeBody): Promise<Judge> =>
@@ -154,6 +168,11 @@ export const compareApi = {
   /** Two runs side by side: snapshot differences and paired results. */
   compare: async (runA: number, runB: number): Promise<Comparison> =>
     comparisonSchema.parse(await request('GET', `/v1/compare?runA=${runA}&runB=${runB}`)),
+}
+
+export const usageApi = {
+  /** Which prompts and judges use each configured model. */
+  get: async (): Promise<Usage> => usageSchema.parse(await request('GET', '/v1/usage')),
 }
 
 export const settingsApi = {

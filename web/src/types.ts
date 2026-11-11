@@ -134,3 +134,15 @@ export interface Settings {
   defaultOptimizerModel: string // "<provider id>/<model>"
   providers: Provider[]
 }
+
+/** An experiment that references a library object or a model. */
+export interface UsageRef {
+  id: string
+  name: string
+  projectId: string
+}
+
+/** Which prompts and judges point at each model id. Keyed by "<provider id>/<model>". */
+export interface Usage {
+  models: Record<string, { prompts: UsageRef[]; judges: UsageRef[] }>
+}

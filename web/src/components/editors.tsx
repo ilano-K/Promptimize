@@ -1,26 +1,53 @@
 import { Plus, Trash, Warning } from '@phosphor-icons/react'
-import { useState } from 'react'
-import { uid, useDefaultModel, usedBy, useStore } from '../store'
-import type { Characteristic, Input, Judge, Label, Prompt } from '../types'
+import { useEffect, useState } from 'react'
+import { inputsApi, judgesApi, promptsApi } from '../api'
+import { usageRefFromApi } from '../mappers'
+import { uid, useDefaultModel, useStore } from '../store'
+import type { Characteristic, Input, Judge, Label, Prompt, UsageRef } from '../types'
 import { Button, Field, inputCls, ModelSelect, Modal, monoAreaCls, textareaCls } from './ui'
 import { errorMessage, labelHelp } from './ui.helpers'
 
 type Kind = 'input' | 'prompt' | 'judge'
 
+/**
+ * "Used by" fetched at open time, not read from the store: the library list is
+ * not reloaded after every experiment edit, and a removal warning has to name
+ * the experiments that exist right now.
+ */
+function useUsage(kind: Kind, id?: string): UsageRef[] | null {
+  const [loaded, setLoaded] = useState<{ id: string; refs: UsageRef[] } | null>(null)
+
+  useEffect(() => {
+    if (!id) return
+    const read = kind === 'input' ? inputsApi.read : kind === 'prompt' ? promptsApi.read : judgesApi.read
+    let live = true
+    read(Number(id))
+      .then((x) => {
+        if (live) setLoaded({ id, refs: x.usedBy.map(usageRefFromApi) })
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [kind, id])
+
+  if (!id) return []
+  return loaded?.id === id ? loaded.refs : null
+}
+
 /** "Used by" notice shown when editing an object that experiments reference. */
-function UsedBy({ kind, id }: { kind: Kind; id?: string }) {
-  const experiments = useStore((s) => s.experiments)
+function UsedBy({ id, refs }: { id?: string; refs: UsageRef[] | null }) {
   if (!id) return null
-  const list = usedBy(experiments, kind, id)
-  if (!list.length) return <p className="text-xs text-fg-3">Not used by any experiment yet.</p>
+  if (!refs) return <p className="text-xs text-fg-3">Checking which experiments use this...</p>
+  if (!refs.length) return <p className="text-xs text-fg-3">Not used by any experiment yet.</p>
   return (
     <div className="flex gap-2.5 rounded-md bg-warn-soft px-3 py-2.5 text-[13px] text-warn">
       <Warning size={16} className="mt-0.5 shrink-0" />
       <div>
         <p className="font-medium">
-          Used by {list.length} experiment{list.length > 1 ? 's' : ''}. Changes apply from their next run.
+          Used by {refs.length} experiment{refs.length > 1 ? 's' : ''}. Changes apply from their next run.
         </p>
-        <p className="mt-0.5 opacity-90">{list.map((e) => e.name).join(', ')}</p>
+        <p className="mt-0.5 opacity-90">{refs.map((e) => e.name).join(', ')}</p>
         <p className="mt-0.5 opacity-75">Past runs keep their snapshot and won't change.</p>
       </div>
     </div>
@@ -57,11 +84,16 @@ function Footer({
   )
 }
 
-function useDelete(kind: Kind, id: string | undefined, onClose: () => void, onError: (message: string) => void) {
-  const experiments = useStore((s) => s.experiments)
+function useDelete(
+  kind: Kind,
+  id: string | undefined,
+  refs: UsageRef[] | null,
+  onClose: () => void,
+  onError: (message: string) => void,
+) {
   const del = useStore((s) => s.deleteObject)
   if (!id) return undefined
-  const used = usedBy(experiments, kind, id)
+  const used = refs ?? []
   return () => {
     const consequence =
       kind === 'input'
@@ -86,7 +118,8 @@ export function InputEditor({ initial, onClose, onSaved }: { initial?: Input; on
   const [v, setV] = useState<Input>(() => initial ?? { id: '', projectId, name: '', content: '', label: 'train' })
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const onDelete = useDelete('input', initial?.id, onClose, setSaveError)
+  const refs = useUsage('input', initial?.id)
+  const onDelete = useDelete('input', initial?.id, refs, onClose, setSaveError)
   const ok = v.name.trim() && v.content.trim()
   const saveAndClose = async () => {
     setBusy(true)
@@ -104,10 +137,10 @@ export function InputEditor({ initial, onClose, onSaved }: { initial?: Input; on
     <Modal
       title={initial ? 'Edit input' : 'New input'}
       onClose={onClose}
-      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy} onSave={() => void saveAndClose()} />}
+      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy || refs === null} onSave={() => void saveAndClose()} />}
     >
       <div className="flex flex-col gap-5">
-        <UsedBy kind="input" id={initial?.id} />
+        <UsedBy id={initial?.id} refs={refs} />
         <Field label="Name">{(id) => <input id={id} className={inputCls} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
         <Field label="Content" help="What your app would receive. It replaces {{input}} in the prompt.">
           {(id) => <textarea id={id} rows={5} className={textareaCls} value={v.content} onChange={(e) => setV({ ...v, content: e.target.value })} />}
@@ -149,7 +182,8 @@ export function PromptEditor({ initial, onClose, onSaved }: { initial?: Prompt; 
   )
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const onDelete = useDelete('prompt', initial?.id, onClose, setSaveError)
+  const refs = useUsage('prompt', initial?.id)
+  const onDelete = useDelete('prompt', initial?.id, refs, onClose, setSaveError)
   let schemaError: string | undefined
   if (v.outputSchema.trim()) {
     try {
@@ -176,10 +210,10 @@ export function PromptEditor({ initial, onClose, onSaved }: { initial?: Prompt; 
       wide
       title={initial ? 'Edit prompt' : 'New prompt'}
       onClose={onClose}
-      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy} onSave={() => void saveAndClose()} />}
+      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy || refs === null} onSave={() => void saveAndClose()} />}
     >
       <div className="flex flex-col gap-5">
-        <UsedBy kind="prompt" id={initial?.id} />
+        <UsedBy id={initial?.id} refs={refs} />
         <div className="grid gap-4 sm:grid-cols-[1fr_1fr]">
           <Field label="Name">{(id) => <input id={id} className={inputCls} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
           <Field label="Model" help="To test another model, make a separate prompt.">
@@ -229,7 +263,8 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
   )
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const onDelete = useDelete('judge', initial?.id, onClose, setSaveError)
+  const refs = useUsage('judge', initial?.id)
+  const onDelete = useDelete('judge', initial?.id, refs, onClose, setSaveError)
   const setChar = (i: number, c: Characteristic) => setV({ ...v, characteristics: v.characteristics.map((x, j) => (j === i ? c : x)) })
   const names = v.characteristics.map((c) => c.name.trim())
   const dupes = names.some((n, i) => n && names.indexOf(n) !== i)
@@ -255,10 +290,10 @@ export function JudgeEditor({ initial, onClose, onSaved }: { initial?: Judge; on
       wide
       title={initial ? 'Edit judge' : 'New judge'}
       onClose={onClose}
-      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy} onSave={() => void saveAndClose()} />}
+      footer={<Footer onClose={onClose} onDelete={onDelete} disabled={!ok} busy={busy || refs === null} onSave={() => void saveAndClose()} />}
     >
       <div className="flex flex-col gap-5">
-        <UsedBy kind="judge" id={initial?.id} />
+        <UsedBy id={initial?.id} refs={refs} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name">{(id) => <input id={id} className={inputCls} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
           <Field label="Model">{(id) => <ModelSelect id={id} value={v.model} onChange={(model) => setV({ ...v, model })} />}</Field>
