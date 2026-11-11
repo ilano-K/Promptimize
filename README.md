@@ -38,8 +38,8 @@ npm start
 
 | | Windows | macOS | Linux |
 | --- | --- | --- | --- |
-| Config and API keys | `%APPDATA%\promptimize\Config` | `~/Library/Preferences/promptimize` | `~/.config/promptimize` |
-| Database | `%LOCALAPPDATA%\promptimize\Data` | `~/Library/Application Support/promptimize` | `~/.local/share/promptimize` |
+| Config and API keys | `%APPDATA%\promptimize\config.json` | `~/Library/Preferences/promptimize/config.json` | `~/.config/promptimize/config.json` |
+| Database | `%LOCALAPPDATA%\promptimize\promptimize.db` | `~/Library/Application Support/promptimize/promptimize.db` | `~/.local/share/promptimize/promptimize.db` |
 
 The database is `promptimize.db`; deleting it starts you clean. The config is `config.json`, created on first start and written with owner-only permissions where the OS supports them. It is kept outside the repo on purpose: it holds your keys in plain text, the same way most local tools do.
 
@@ -59,9 +59,9 @@ Each input goes through the prompt, then the judge. Results are written as they 
 
 ## Optimizing the prompt
 
-There is no built-in optimizer. The app stops at run, read, edit, compare, and the optimize loop from earlier plans is deprecated.
+The built-in optimizer is deprecated. Optimizing now belongs to an external agent, and MCP support is planned to make that possible.
 
-MCP support is planned instead. Once the app exposes its library, runs, and results over MCP, an agent can run the loop itself: read the outputs and scores, rewrite the prompt, start the next run, compare the two. The agent brings the judgement about what to change; Promptimize keeps the history, the snapshots, and the scoring.
+Once the app exposes its library, runs, and results over MCP, an agent can run the loop itself: read the outputs and scores, rewrite the prompt, start the next run, compare the two. The agent brings the judgement about what to change; Promptimize keeps the history, the snapshots, and the scoring.
 
 ## Repo layout
 
