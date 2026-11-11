@@ -17,13 +17,26 @@ sqlite.pragma("foreign_keys = ON");
 
 export const db = drizzle(sqlite, { schema });
 
-// server/drizzle, relative to this file. Must change once the server is bundled into dist/.
-const migrationsFolder = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../drizzle",
-);
+// Migrations ship next to the build: server/drizzle in the repo and in the
+// package (dist/ and drizzle/ are siblings), so check the layouts instead of
+// hardcoding one depth.
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+function migrationsFolder(): string {
+  const candidates = [
+    path.resolve(here, "../drizzle"), // bundled: server/dist -> server/drizzle
+    path.resolve(here, "../../drizzle"), // dev: server/src/db -> server/drizzle
+    path.resolve(here, "drizzle"), // if the build copies them into dist/
+  ];
+
+  const found = candidates.find((dir) => fs.existsSync(path.join(dir, "meta", "_journal.json")));
+  if (!found) {
+    throw new Error("Migration files not found. Reinstall promptimize.");
+  }
+  return found;
+}
 
 // Applies only migrations not yet recorded in __drizzle_migrations. Synchronous; call before serve().
 export function runMigrations() {
-  migrate(db, { migrationsFolder });
+  migrate(db, { migrationsFolder: migrationsFolder() });
 }

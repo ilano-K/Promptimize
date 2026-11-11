@@ -32,6 +32,7 @@ bruno/
 .superpowers/
 .vibe-wise/
 *.md
-!.README.md
+!README.md
+web/README.md
 docs/
 build_output.txt

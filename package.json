@@ -3,18 +3,46 @@
   "version": "0.0.0",
   "description": "Local app for optimizing prompts",
   "type": "module",
+  "bin": {
+    "promptimize": "./bin/promptimize.js"
+  },
+  "files": [
+    "bin",
+    "server/dist",
+    "server/drizzle",
+    "web/dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
     "web",
     "server",
     "shared"
   ],
-  "bin": {
-    "promptimize": "./bin/promptimize.js"
-  },
   "scripts": {
     "dev": "concurrently -n web,server -c cyan,magenta \"npm run dev -w web\" \"npm run dev -w server\"",
     "build": "npm run build -w web && npm run build -w server",
+    "start": "node bin/promptimize.js",
+    "prepack": "npm run build",
     "typecheck": "tsc -p server --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.78",
+    "@ai-sdk/google": "^4.0.93",
+    "@ai-sdk/openai": "^4.0.91",
+    "@ai-sdk/openai-compatible": "^3.0.67",
+    "@hono/node-server": "^2.1.4",
+    "@hono/zod-validator": "^0.9.1",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
+    "ai": "^7.0.137",
+    "ajv": "^8.20.0",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.4",
+    "env-paths": "^4.0.0",
+    "hono": "^4.13.13",
+    "open": "^11.0.4",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"
