@@ -10,5 +10,5 @@ export * from "./judges.js";
 export * from "./experiments.js";
 export * from "./runs.js";
 export * from "./result.js";
-
+export * from "./compare.js";
 export type Health = { ok: true };
