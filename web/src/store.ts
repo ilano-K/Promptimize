@@ -1,8 +1,6 @@
 // All app state lives here. Projects, their library objects, experiments and
-// runs come from the server; optimize loops are still simulated in the browser
-// (the "model calls" come from sim.ts) and saved to localStorage. A run is
-// polled only while its status is non-terminal, so a reload shows the server's
-// state instead of losing it.
+// runs come from the server. A run is polled only while its status is
+// non-terminal, so a reload shows the server's state instead of losing it.
 
 import type { CreateProjectBody, CreateProviderBody, UpdateProjectBody, UpdateProviderBody } from '@promptimize/shared'
 import { isTerminalRun, type RunState } from '@promptimize/shared'
@@ -25,21 +23,7 @@ import {
   promptToUpdate,
   runFromApi,
 } from './mappers'
-import { snapshotProviders } from './providers'
-import * as seed from './seed'
-import { batchJudgeFails, generateOutput, goodEnough, judgeOutput, optimizePrompt, roundNote, sleep } from './sim'
-import type {
-  Experiment,
-  Input,
-  Judge,
-  OptimizeLoop,
-  Project,
-  Prompt,
-  Provider,
-  Result,
-  Run,
-  Settings,
-} from './types'
+import type { Experiment, Input, Judge, Project, Prompt, Provider, Run, Settings } from './types'
 
 export const uid = () => crypto.randomUUID().slice(0, 8)
 
@@ -55,21 +39,9 @@ interface Data {
   prompts: Prompt[]
   judges: Judge[]
   experiments: Experiment[]
-  /**
-   * Server runs plus the still-simulated optimize-loop runs. Server runs are
-   * refreshed by polling; only the latest result set per run is kept.
-   */
+  /** Server runs, refreshed by polling; only the latest result set per run is kept. */
   runs: Run[]
-  loops: OptimizeLoop[]
   settings: Settings
-}
-
-interface OptimizeConfig {
-  mode: '1-pass' | 'n-pass'
-  maxRounds: number
-  earlyStop: boolean
-  optimizerModel: string
-  instructions: string
 }
 
 interface Actions {
@@ -97,18 +69,11 @@ interface Actions {
   loadRuns: (experimentId: string) => Promise<void>
   /** Fetches one run's results if they aren't in the store yet. */
   loadRun: (runId: string) => Promise<void>
-  startOptimize: (experimentId: string, cfg: OptimizeConfig) => string
-  stopLoop: (loopId: string) => void
-  runTest: (loopId: string, round: number) => void
-  saveRoundPrompt: (loopId: string, round: number, name: string) => Promise<Prompt>
-  experimentFromRound: (loopId: string, round: number, name: string) => Promise<Experiment>
-  updateSettings: (patch: Partial<Settings>) => Promise<void>
   /** Providers live on the server. These call the API, then mirror the response into the store. */
   loadSettings: () => Promise<void>
   addProvider: (body: CreateProviderBody) => Promise<Provider>
   updateProvider: (id: string, body: UpdateProviderBody) => Promise<Provider>
   removeProvider: (id: string) => Promise<void>
-  resetDemo: () => void
 }
 
 const initial = (): Data => ({
@@ -120,31 +85,18 @@ const initial = (): Data => ({
   judges: [],
   experiments: [],
   runs: [],
-  loops: [],
-  settings: seed.settings,
+  settings: { providers: [] },
 })
 
-// Runs the user asked to stop. Checked between simulated steps.
-const stopRequested = new Set<string>()
-const judgeAttempts = new Map<string, number>()
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 // Runs with an in-flight poll loop, and runs whose results are already loaded.
 const polling = new Set<string>()
 const loadedDetails = new Set<string>()
 
 export const useStore = create<Data & Actions>()(
   persist(
-    (set, get) => {
-      const patchRun = (id: string, fn: (r: Run) => Run) =>
-        set((s) => ({ runs: s.runs.map((r) => (r.id === id ? fn(r) : r)) }))
-      const patchResult = (runId: string, key: string, patch: Partial<Result>) =>
-        patchRun(runId, (r) => ({
-          ...r,
-          results: r.results.map((x) => (x.inputKey === key ? { ...x, ...patch } : x)),
-        }))
-      const patchLoop = (id: string, fn: (l: OptimizeLoop) => OptimizeLoop) =>
-        set((s) => ({ loops: s.loops.map((l) => (l.id === id ? fn(l) : l)) }))
-      const getRun = (id: string) => get().runs.find((r) => r.id === id)!
-
+    (set) => {
       const upsertRun = (run: Run) =>
         set((s) => ({
           runs: s.runs.some((r) => r.id === run.id) ? s.runs.map((r) => (r.id === run.id ? run : r)) : [...s.runs, run],
@@ -175,158 +127,6 @@ export const useStore = create<Data & Actions>()(
             polling.delete(runId)
           }
         })()
-      }
-
-      /** The judge step. Only touches results that have an output but no verdict. */
-      async function judgeStep(runId: string) {
-        const run = getRun(runId)
-        const judge = run.snapshot.judge
-        if (!judge) return
-        const pending = run.results.filter((r) => r.status === 'output_done' || r.status === 'judge_error')
-        const inputOf = (key: string) => run.snapshot.inputs.find((i) => i.id === key)!
-
-        if (judge.mode === 'batch') {
-          pending.forEach((r) => patchResult(runId, r.inputKey, { status: 'judging' }))
-          await sleep(900)
-          const attempt = (judgeAttempts.get(runId) ?? 0) + 1
-          judgeAttempts.set(runId, attempt)
-          if (attempt === 1 && batchJudgeFails(runId)) {
-            const got = Math.max(1, pending.length - 2)
-            pending.forEach((r) => patchResult(runId, r.inputKey, { status: 'judge_error' }))
-            patchRun(runId, (r) => ({
-              ...r,
-              status: 'judge_error',
-              error: `Batch judge returned ${got} entries for ${pending.length} outputs. Outputs were kept.`,
-            }))
-            return
-          }
-          pending.forEach((r) =>
-            patchResult(runId, r.inputKey, {
-              status: 'judged',
-              judge: judgeOutput(judge, run.snapshot.prompt, inputOf(r.inputKey)),
-            }),
-          )
-        } else {
-          for (const r of pending) {
-            if (stopRequested.has(runId)) return
-            patchResult(runId, r.inputKey, { status: 'judging' })
-            await sleep(260)
-            patchResult(runId, r.inputKey, {
-              status: 'judged',
-              judge: judgeOutput(judge, run.snapshot.prompt, inputOf(r.inputKey)),
-            })
-          }
-        }
-      }
-
-      async function execute(runId: string) {
-        const run = getRun(runId)
-        for (const res of run.results) {
-          if (stopRequested.has(runId)) break
-          if (res.output) continue
-          patchResult(runId, res.inputKey, { status: 'generating' })
-          await sleep(380)
-          const input = run.snapshot.inputs.find((i) => i.id === res.inputKey)!
-          patchResult(runId, res.inputKey, { status: 'output_done', output: generateOutput(run.snapshot.prompt, input) })
-        }
-        if (!stopRequested.has(runId)) await judgeStep(runId)
-        const after = getRun(runId)
-        if (stopRequested.has(runId)) {
-          stopRequested.delete(runId)
-          patchRun(runId, (r) => ({ ...r, status: 'stopped' }))
-        } else if (after.status !== 'judge_error') {
-          patchRun(runId, (r) => ({ ...r, status: 'done', error: undefined }))
-        }
-      }
-
-      /** Builds a snapshot and an empty run. Doesn't start it. */
-      function createRun(
-        experimentId: string,
-        opts: { promptText?: string; promptName?: string; labels?: Input['label'][]; loopId?: string; round?: number; kind?: Run['kind'] } = {},
-      ): string {
-        const s = get()
-        const e = s.experiments.find((x) => x.id === experimentId)
-        if (!e) throw new Error('Experiment not found.')
-        // A deleted prompt leaves the reference null; the experiment can't run until one is picked.
-        if (!e.promptId) throw new Error('This experiment has no prompt. Pick one before running.')
-        const prompt = s.prompts.find((p) => p.id === e.promptId)
-        if (!prompt) throw new Error('The prompt for this experiment is missing. Pick one before running.')
-        // A null judge is prompt-only: outputs are saved, never scored.
-        const judge = e.judgeId ? (s.judges.find((j) => j.id === e.judgeId) ?? null) : null
-        let ins = s.inputs.filter((i) => e.inputIds.includes(i.id))
-        if (opts.labels) ins = ins.filter((i) => opts.labels!.includes(i.label))
-        const run: Run = {
-          id: uid(),
-          experimentId,
-          kind: opts.kind ?? 'run',
-          loopId: opts.loopId,
-          round: opts.round,
-          startedAt: Date.now(),
-          status: 'running',
-          snapshot: {
-            prompt: { ...prompt, text: opts.promptText ?? prompt.text, name: opts.promptName ?? prompt.name },
-            inputs: ins.map((i) => ({ ...i })),
-            judge: judge ? structuredClone(judge) : null,
-            providers: snapshotProviders(s.settings.providers, [prompt.model, ...(judge ? [judge.model] : [])]),
-          },
-          results: ins.map((i) => ({ inputKey: i.id, status: 'pending' })),
-        }
-        set((st) => ({ runs: [...st.runs, run] }))
-        return run.id
-      }
-
-      async function waitForRun(runId: string) {
-        await execute(runId)
-        // A judge error inside a loop gets one automatic retry from the judge step.
-        if (getRun(runId).status === 'judge_error') {
-          patchRun(runId, (r) => ({ ...r, status: 'running' }))
-          await judgeStep(runId)
-          if (getRun(runId).status !== 'judge_error') patchRun(runId, (r) => ({ ...r, status: 'done', error: undefined }))
-        }
-      }
-
-      async function optimizeLoop(loopId: string) {
-        const loop = () => get().loops.find((l) => l.id === loopId)!
-        const e = get().experiments.find((x) => x.id === loop().experimentId)!
-        const prompt = get().prompts.find((p) => p.id === e.promptId)!
-        const labels: Input['label'][] = ['train', 'validation']
-
-        let text = prompt.text
-        const baseRun = createRun(e.id, { labels, loopId, round: 0, promptName: `${prompt.name} (original)` })
-        patchLoop(loopId, (l) => ({ ...l, rounds: [{ index: 0, promptText: text, runId: baseRun, note: '' }] }))
-        await waitForRun(baseRun)
-        patchLoop(loopId, (l) => ({ ...l, rounds: l.rounds.map((r) => (r.index === 0 ? { ...r, note: roundNote(1) } : r)) }))
-
-        const max = loop().mode === '1-pass' ? 1 : loop().maxRounds
-        let reason = `Used all ${max} round${max > 1 ? 's' : ''}.`
-        for (let round = 1; round <= max; round++) {
-          if (loop().status !== 'running') {
-            reason = `Stopped by you after round ${round - 1}.`
-            break
-          }
-          await sleep(700) // optimizer call
-          text = optimizePrompt(text, round, loop().instructions)
-          const runId = createRun(e.id, { labels, loopId, round, promptText: text, promptName: `${prompt.name} (round ${round})` })
-          patchLoop(loopId, (l) => ({ ...l, rounds: [...l.rounds, { index: round, promptText: text, runId, note: '' }] }))
-          await waitForRun(runId)
-          patchLoop(loopId, (l) => ({
-            ...l,
-            rounds: l.rounds.map((r) => (r.index === round ? { ...r, note: roundNote(round + 1) } : r)),
-          }))
-          if (loop().earlyStop && goodEnough(text) && round < max) {
-            reason = `Optimizer stopped early after round ${round}: it judged the prompt good enough.`
-            break
-          }
-        }
-        const wasStopped = loop().status === 'stopped'
-        patchLoop(loopId, (l) => ({
-          ...l,
-          status: wasStopped ? 'stopped' : 'done',
-          stopReason: wasStopped ? `Stopped by you after round ${l.rounds.length - 1}.` : reason,
-          summary:
-            'Main changes: shorter summaries (2 sentences max), the customer\'s ask moved to the first sentence, and speculation removed. ' +
-            'Validation clarity rose in early rounds, then flattened. Check validation before picking a round; train scores rise faster than validation ones.',
-        }))
       }
 
       return {
@@ -372,7 +172,7 @@ export const useStore = create<Data & Actions>()(
           set((s) => ({ projects: s.projects.map((x) => (x.id === id ? p : x)) }))
           return p
         },
-        /** Deletes the project on the server, then its library objects, experiments, runs and loops here. */
+        /** Deletes the project on the server, then its library objects, experiments and runs here. */
         deleteProject: async (id) => {
           await projectsApi.remove(id)
           const key = String(id)
@@ -386,7 +186,6 @@ export const useStore = create<Data & Actions>()(
               judges: s.judges.filter((x) => x.projectId !== key),
               experiments: s.experiments.filter((x) => x.projectId !== key),
               runs: s.runs.filter((r) => !expIds.has(r.experimentId)),
-              loops: s.loops.filter((l) => !expIds.has(l.experimentId)),
             }
           })
         },
@@ -451,7 +250,6 @@ export const useStore = create<Data & Actions>()(
           set((s) => ({
             experiments: s.experiments.filter((x) => x.id !== id),
             runs: s.runs.filter((r) => r.experimentId !== id),
-            loops: s.loops.filter((l) => l.experimentId !== id),
           }))
         },
 
@@ -480,28 +278,12 @@ export const useStore = create<Data & Actions>()(
           return run.id
         },
         retryJudge: async (runId) => {
-          const current = get().runs.find((r) => r.id === runId)
-          // Simulated optimize-loop runs still use the local judge step.
-          if (current?.loopId) {
-            patchRun(runId, (r) => ({ ...r, status: 'running', error: undefined }))
-            await judgeStep(runId)
-            if (getRun(runId).status !== 'judge_error') patchRun(runId, (r) => ({ ...r, status: 'done' }))
-            return
-          }
-
           const run = runFromApi(await runsApi.retryJudging(Number(runId)))
           loadedDetails.add(runId)
           upsertRun(run)
           pollRun(runId)
         },
         stopRun: async (runId) => {
-          const current = get().runs.find((r) => r.id === runId)
-          // Loops are simulated, so their stop is the in-memory flag.
-          if (current?.loopId) {
-            stopRequested.add(runId)
-            return
-          }
-
           const run = runFromApi(await runsApi.stop(Number(runId)))
           loadedDetails.add(runId)
           upsertRun(run)
@@ -519,7 +301,7 @@ export const useStore = create<Data & Actions>()(
             })
             return {
               // Replace this experiment's server runs wholesale so deleted runs disappear.
-              runs: [...s.runs.filter((r) => r.loopId || r.experimentId !== experimentId), ...merged],
+              runs: [...s.runs.filter((r) => r.experimentId !== experimentId), ...merged],
             }
           })
 
@@ -535,57 +317,12 @@ export const useStore = create<Data & Actions>()(
           if (!isTerminalRun(run.status as RunState)) pollRun(runId)
         },
 
-        startOptimize: (experimentId, cfg) => {
-          const e = get().experiments.find((x) => x.id === experimentId)
-          if (!e?.promptId || !e.judgeId) throw new Error('This experiment needs a prompt and a judge before it can optimize.')
-          const l: OptimizeLoop = { id: uid(), experimentId, ...cfg, status: 'running', rounds: [], startedAt: Date.now() }
-          set((s) => ({ loops: [...s.loops, l] }))
-          void optimizeLoop(l.id)
-          return l.id
-        },
-        stopLoop: (loopId) => patchLoop(loopId, (l) => ({ ...l, status: 'stopped' })),
-
-        runTest: (loopId, round) => {
-          const l = get().loops.find((x) => x.id === loopId)!
-          const r = l.rounds.find((x) => x.index === round)!
-          const runId = createRun(l.experimentId, {
-            labels: ['test'],
-            loopId,
-            round,
-            kind: 'test',
-            promptText: r.promptText,
-            promptName: `round ${round} (test)`,
-          })
-          patchLoop(loopId, (x) => ({
-            ...x,
-            rounds: x.rounds.map((y) => (y.index === round ? { ...y, testRunId: runId } : y)),
-          }))
-          void execute(runId)
-        },
-
-        saveRoundPrompt: async (loopId, round, name) => {
-          const s = get()
-          const l = s.loops.find((x) => x.id === loopId)!
-          const e = s.experiments.find((x) => x.id === l.experimentId)!
-          const base = e.promptId ? s.prompts.find((p) => p.id === e.promptId) : undefined
-          if (!base) throw new Error('This experiment has no prompt to copy.')
-          const r = l.rounds.find((x) => x.index === round)!
-          return get().savePrompt({ ...base, id: '', name, text: r.promptText })
-        },
-        experimentFromRound: async (loopId, round, name) => {
-          const prompt = await get().saveRoundPrompt(loopId, round, name)
-          const s = get()
-          const l = s.loops.find((x) => x.id === loopId)!
-          const orig = s.experiments.find((x) => x.id === l.experimentId)!
-          return get().saveExperiment({ ...orig, id: '', name, promptId: prompt.id, createdAt: Date.now() })
-        },
-
         // The server owns settings. On load we overwrite the cached copy; if the
         // server is down we keep showing the cache instead of an empty screen.
         loadSettings: async () => {
           try {
             const s = await settingsApi.get()
-            set({ settings: { defaultOptimizerModel: s.defaultOptimizerModel, providers: s.providers } })
+            set({ settings: { providers: s.providers } })
           } catch {}
         },
         addProvider: async (body) => {
@@ -602,18 +339,6 @@ export const useStore = create<Data & Actions>()(
           await settingsApi.deleteProvider(id)
           set((s) => ({ settings: { ...s.settings, providers: s.settings.providers.filter((x) => x.id !== id) } }))
         },
-
-        updateSettings: async (patch: Partial<Settings>) => {
-          // Optimistic: apply locally first, then persist. If the server is
-          // unreachable we keep the local change rather than reverting silently.
-          set((s) => ({ settings: { ...s.settings, ...patch } }))
-          try {
-            await settingsApi.update(patch)
-          } catch {}
-        },
-        // Projects, the library and experiments live on the server. Only the
-        // simulated runs and loops are stored in this browser.
-        resetDemo: () => set({ runs: [], loops: [] }),
       }
     },
     {
@@ -623,11 +348,11 @@ export const useStore = create<Data & Actions>()(
       // v3 moved projects to the server; the old browser copies (string ids) are dropped.
       // v4 moved the library and experiments to the server; the seed-backed copies and
       // the runs that snapshotted them are dropped.
-      // v5 runs live on the server too, so the old simulated runs (and the loops that
-      // pointed at them) are dropped; runs are reloaded from the server per experiment.
+      // v5 runs live on the server too, so the old simulated runs are dropped; runs are
+      // reloaded from the server per experiment.
       migrate: (state, version) => {
         const s = state as Data
-        if (version < 2) s.settings = seed.settings
+        if (version < 2) s.settings = { providers: [] }
         if (version < 3) {
           delete (s as Partial<Data>).projects
           s.projectId = ''
@@ -638,29 +363,13 @@ export const useStore = create<Data & Actions>()(
           delete (s as Partial<Data>).judges
           delete (s as Partial<Data>).experiments
           s.runs = []
-          s.loops = []
         }
-        if (version < 5) {
-          s.runs = []
-          s.loops = []
-        }
+        if (version < 5) s.runs = []
         return s
-      },
-      onRehydrateStorage: () => (state) => {
-        if (!state) return
-        // Only simulated loop runs die with the tab. Server runs keep their
-        // status and are fetched again when their experiment is opened.
-        state.runs = state.runs.map((r) =>
-          r.loopId && r.status === 'running' ? { ...r, status: 'stopped', error: 'Interrupted: the page was reloaded while this loop run was going.' } : r,
-        )
-        state.loops = state.loops.map((l) =>
-          l.status === 'running' ? { ...l, status: 'stopped', stopReason: 'Interrupted: the page was reloaded.' } : l,
-        )
       },
       partialize: (s) => ({
         projectId: s.projectId,
         runs: s.runs,
-        loops: s.loops,
         settings: s.settings,
       }),
     },
@@ -707,9 +416,7 @@ export function averagesFor(run: Run, label: Input['label']): Record<string, num
 }
 
 export function latestRun(runs: Run[], experimentId: string): Run | undefined {
-  return runs
-    .filter((r) => r.experimentId === experimentId && !r.loopId)
-    .sort((a, b) => b.startedAt - a.startedAt)[0]
+  return runs.filter((r) => r.experimentId === experimentId).sort((a, b) => b.startedAt - a.startedAt)[0]
 }
 
 export interface ModelGroup {

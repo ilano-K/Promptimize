@@ -5,9 +5,9 @@ import type { Label } from '../types'
 
 /** Help text for each input split label, shown in tooltips and editors. */
 export const labelHelp: Record<Label, string> = {
-  train: 'The optimizer learns from these in full: inputs, outputs, and judge feedback.',
-  validation: 'Run every round so you can see if changes really help. The optimizer only sees their number scores.',
-  test: 'Never seen during optimizing. Run on demand on the round you pick, as a final check.',
+  train: 'The cases you look at while rewriting: inputs, outputs, and judge feedback.',
+  validation: 'Check these between runs to see if a change really helped, not just on the cases you tuned.',
+  test: 'A final check on a change you already picked. Do not tune on these.',
 }
 
 /** Compact "2 h ago" style timestamp. */

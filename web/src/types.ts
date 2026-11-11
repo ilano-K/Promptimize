@@ -1,7 +1,7 @@
 // Shared domain types. These mirror the logical schema in docs/TECHNICAL.md.
-// The server owns projects, the library and experiments; the shapes below are
-// the web-facing versions (string ids and numeric timestamps) used by the
-// prototype screens, with runs/loops still simulated in the browser.
+// The server owns projects, the library, experiments and runs; the shapes
+// below are the web-facing versions (string ids and numeric timestamps) used
+// by the screens.
 
 export type Label = 'train' | 'validation' | 'test'
 export type CharType = 'text' | 'number'
@@ -78,10 +78,9 @@ export interface Result {
 }
 
 /**
- * The server's run states. `judge_error` and `stopped` are only used by the
- * still-simulated optimize loops; real runs never leave the server's set.
+ * The server's run states.
  */
-export type RunStatus = 'pending' | 'running' | 'stopping' | 'done' | 'cancelled' | 'interrupted' | 'failed' | 'judge_error' | 'stopped'
+export type RunStatus = 'pending' | 'running' | 'stopping' | 'done' | 'cancelled' | 'interrupted' | 'failed'
 
 export interface Run {
   id: string
@@ -90,32 +89,6 @@ export interface Run {
   results: Result[]
   status: RunStatus
   error?: string
-  startedAt: number
-  loopId?: string
-  round?: number
-  kind: 'run' | 'test'
-}
-
-export interface Round {
-  index: number // 0 = the original prompt
-  promptText: string
-  runId: string
-  note: string
-  testRunId?: string
-}
-
-export interface OptimizeLoop {
-  id: string
-  experimentId: string
-  mode: '1-pass' | 'n-pass'
-  maxRounds: number
-  earlyStop: boolean
-  optimizerModel: string
-  instructions: string
-  status: 'running' | 'done' | 'stopped'
-  stopReason?: string
-  summary?: string
-  rounds: Round[]
   startedAt: number
 }
 
@@ -131,7 +104,6 @@ export interface Provider {
 }
 
 export interface Settings {
-  defaultOptimizerModel: string // "<provider id>/<model>"
   providers: Provider[]
 }
 

@@ -45,7 +45,6 @@ import type {
   UpdateProjectBody,
   UpdatePromptBody,
   UpdateProviderBody,
-  UpdateSettingsBody,
   Usage,
 } from '@promptimize/shared'
 
@@ -177,8 +176,6 @@ export const usageApi = {
 
 export const settingsApi = {
   get: async (): Promise<Settings> => (await request('GET', '/v1/settings')) as Settings,
-  update: async (body: UpdateSettingsBody): Promise<{ defaultOptimizerModel: string }> =>
-    (await request('PATCH', '/v1/settings', body)) as { defaultOptimizerModel: string },
   addProvider: async (body: CreateProviderBody): Promise<SafeProvider> =>
     (await request('POST', '/v1/settings', body)) as SafeProvider,
   updateProvider: async (id: string, body: UpdateProviderBody): Promise<SafeProvider> =>

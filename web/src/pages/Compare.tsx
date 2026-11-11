@@ -69,7 +69,7 @@ export function Compare({ a, b }: { a?: string; b?: string }) {
   // Each side picks an experiment, then one of its runs (latest by default). Value format: "expId:runId".
   const runsOf = (id: string) =>
     s.runs
-      .filter((r) => r.experimentId === id && !r.loopId && !['pending', 'running', 'stopping'].includes(r.status))
+      .filter((r) => r.experimentId === id && !['pending', 'running', 'stopping'].includes(r.status))
       .sort((x, y) => y.startedAt - x.startedAt)
   const resolve = (v?: string) => {
     if (!v) return undefined

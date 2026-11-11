@@ -1,12 +1,12 @@
-import { ArrowClockwise, ArrowLeft, Columns, PencilSimple, Play, Sparkle, Stop, Trash, WarningCircle } from '@phosphor-icons/react'
+import { ArrowClockwise, ArrowLeft, Columns, PencilSimple, Play, Stop, Trash, WarningCircle } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { JudgeEditor, PromptEditor } from '../components/editors'
-import { Button, Empty, Field, inputCls, LabelTag, Modal, ModelSelect, PageHeader, Panel, Score, Tag, textareaCls } from '../components/ui'
+import { Button, Empty, LabelTag, PageHeader, Panel, Score, Tag } from '../components/ui'
 import { errorMessage, timeAgo } from '../components/ui.helpers'
 import { Select } from '../components/Select'
 import { go } from '../router'
 import { averages, useStoreShallow } from '../store'
-import type { Experiment as Exp, Label, Run, RunStatus } from '../types'
+import type { Label, Run, RunStatus } from '../types'
 import { ExperimentForm } from './Experiments'
 
 export function RunStatusTag({ status }: { status: RunStatus }) {
@@ -14,7 +14,6 @@ export function RunStatusTag({ status }: { status: RunStatus }) {
   if (status === 'running') return <Tag tone="accent">Running</Tag>
   if (status === 'stopping') return <Tag tone="warn">Stopping</Tag>
   if (status === 'done') return <Tag>Done</Tag>
-  if (status === 'judge_error') return <Tag tone="danger">Judge error</Tag>
   if (status === 'failed') return <Tag tone="danger">Failed</Tag>
   if (status === 'interrupted') return <Tag tone="warn">Interrupted</Tag>
   return <Tag tone="warn">Cancelled</Tag>
@@ -27,7 +26,6 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
     judges: st.judges,
     inputs: st.inputs,
     runs: st.runs,
-    loops: st.loops,
     startRun: st.startRun,
     loadRuns: st.loadRuns,
     loadRun: st.loadRun,
@@ -37,7 +35,6 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
   }))
   const e = s.experiments.find((x) => x.id === id)
   const [editing, setEditing] = useState<'exp' | 'prompt' | 'judge' | null>(null)
-  const [optimizing, setOptimizing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [starting, setStarting] = useState(false)
   const [restoring, setRestoring] = useState<'prompt' | 'judge' | null>(null)
@@ -61,8 +58,7 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
   const prompt = s.prompts.find((p) => p.id === e.promptId)
   const judge = s.judges.find((j) => j.id === e.judgeId)
   const ins = s.inputs.filter((i) => e.inputIds.includes(i.id))
-  const runs = s.runs.filter((r) => r.experimentId === e.id && !r.loopId).sort((a, b) => b.startedAt - a.startedAt)
-  const loops = s.loops.filter((l) => l.experimentId === e.id).sort((a, b) => b.startedAt - a.startedAt)
+  const runs = s.runs.filter((r) => r.experimentId === e.id).sort((a, b) => b.startedAt - a.startedAt)
   const run = runs.find((r) => r.id === runParam) ?? runs[0]
   const running = runs.some((r) => r.status === 'pending' || r.status === 'running' || r.status === 'stopping')
   const split = (l: Label) => ins.filter((i) => i.label === l).length
@@ -132,9 +128,6 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
             </Button>
             <Button onClick={() => go(`compare?a=${e.id}`)} disabled={!runs.length}>
               <Columns size={15} /> Compare
-            </Button>
-            <Button onClick={() => setOptimizing(true)} disabled={!prompt || !judge || running}>
-              <Sparkle size={15} /> Optimize
             </Button>
             <Button variant="primary" disabled={running || starting || !prompt} onClick={start}>
               <Play size={15} weight="fill" /> Run
@@ -231,27 +224,6 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
         </p>
       )}
 
-      {loops.length > 0 && (
-        <section className="mt-10">
-          <h2 className="mb-3 text-[15px] font-semibold">Optimize loops</h2>
-          <div className="flex flex-col gap-2">
-            {loops.map((l) => (
-              <a key={l.id} href={`#/experiments/${e.id}/loops/${l.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[10px] border border-line bg-surface px-4 py-3 transition-colors hover:border-line-strong">
-                <Sparkle size={16} className="text-accent" />
-                <span className="text-sm font-medium">{l.mode === '1-pass' ? '1-pass rewrite' : `N-pass, up to ${l.maxRounds} rounds`}</span>
-                <span className="font-mono text-xs text-fg-3">{l.optimizerModel}</span>
-                <span className="ml-auto flex items-center gap-3">
-                  <span className="text-xs text-fg-3">
-                    {Math.max(0, l.rounds.length - 1)} round{l.rounds.length === 2 ? '' : 's'} / {timeAgo(l.startedAt)}
-                  </span>
-                  {l.status === 'running' ? <Tag tone="accent">Running</Tag> : l.status === 'stopped' ? <Tag tone="warn">Stopped</Tag> : <Tag>Done</Tag>}
-                </span>
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
-
       <section className="mt-10">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[15px] font-semibold">Runs</h2>
@@ -308,7 +280,6 @@ export function Experiment({ id, runParam }: { id: string; runParam?: string }) 
       {editing === 'exp' && <ExperimentForm initial={e} onClose={() => setEditing(null)} />}
       {editing === 'prompt' && prompt && <PromptEditor initial={prompt} onClose={() => setEditing(null)} />}
       {editing === 'judge' && judge && <JudgeEditor initial={judge} onClose={() => setEditing(null)} />}
-      {optimizing && <OptimizeForm experiment={e} onClose={() => setOptimizing(false)} />}
     </>
   )
 }
@@ -323,7 +294,7 @@ export function RunView({ run, compact }: { run: Run; compact?: boolean }) {
   const judgeErrors = run.results.filter((r) => r.status === 'judge_error').length
   const avg = averages(run)
   const active = run.status === 'pending' || run.status === 'running' || run.status === 'stopping'
-  const stopped = run.status === 'cancelled' || run.status === 'interrupted' || run.status === 'stopped'
+  const stopped = run.status === 'cancelled' || run.status === 'interrupted'
   const retry = () => void retryJudge(run.id).catch((err) => alert(errorMessage(err)))
   const stop = () => void stopRun(run.id).catch((err) => alert(errorMessage(err)))
 
@@ -368,16 +339,14 @@ export function RunView({ run, compact }: { run: Run; compact?: boolean }) {
         )}
       </Panel>
 
-      {(run.status === 'judge_error' || (judgeErrors > 0 && !active)) && (
+      {judgeErrors > 0 && !active && (
         <div className="flex flex-col gap-3 rounded-[10px] border border-danger/30 bg-danger-soft px-5 py-4 sm:flex-row sm:items-center">
           <WarningCircle size={20} className="shrink-0 text-danger" />
           <div className="flex-1 text-sm">
             <p className="font-medium text-danger">The judge's response couldn't be parsed.</p>
             <p className="mt-0.5 text-fg-2">
-              {run.status === 'judge_error'
-                ? `${run.error} `
-                : `${judgeErrors} output${judgeErrors > 1 ? 's were' : ' was'} not judged; the outputs were kept. `}
-              Retrying only re-runs the judge step.
+              {judgeErrors} output{judgeErrors > 1 ? 's were' : ' was'} not judged; the outputs were kept. Retrying only
+              re-runs the judge step.
             </p>
           </div>
           <Button onClick={retry}>
@@ -385,7 +354,7 @@ export function RunView({ run, compact }: { run: Run; compact?: boolean }) {
           </Button>
         </div>
       )}
-      {run.error && run.status !== 'judge_error' && (
+      {run.error && (
         <p className={`text-[13px] ${run.status === 'failed' ? 'text-danger' : 'text-warn'}`}>{run.error}</p>
       )}
 
@@ -466,101 +435,5 @@ function Skeleton({ lines }: { lines: number }) {
         <div key={i} className="skeleton h-3 rounded" style={{ width: `${90 - i * 18}%` }} />
       ))}
     </div>
-  )
-}
-
-function OptimizeForm({ experiment, onClose }: { experiment: Exp; onClose: () => void }) {
-  const s = useStoreShallow((st) => ({ settings: st.settings, inputs: st.inputs, startOptimize: st.startOptimize }))
-  const [mode, setMode] = useState<'1-pass' | 'n-pass'>('n-pass')
-  const [maxRounds, setMaxRounds] = useState(4)
-  const [earlyStop, setEarlyStop] = useState(true)
-  const [model, setModel] = useState(s.settings.defaultOptimizerModel)
-  const [instructions, setInstructions] = useState('')
-  const ins = s.inputs.filter((i) => experiment.inputIds.includes(i.id))
-  const count = (l: Label) => ins.filter((i) => i.label === l).length
-
-  return (
-    <Modal
-      title="Optimize prompt"
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            disabled={count('train') === 0}
-            onClick={() => {
-              const id = s.startOptimize(experiment.id, { mode, maxRounds, earlyStop, optimizerModel: model, instructions })
-              onClose()
-              go(`experiments/${experiment.id}/loops/${id}`)
-            }}
-          >
-            <Sparkle size={15} /> Start
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-5">
-        <div className="grid grid-cols-2 gap-2">
-          {(
-            [
-              ['1-pass', '1-pass', 'One rewrite, then one run.'],
-              ['n-pass', 'N-pass', 'Rewrite, run and judge in a loop.'],
-            ] as const
-          ).map(([m, t, b]) => (
-            <label key={m} className={`cursor-pointer rounded-md border px-3 py-2.5 ${mode === m ? 'border-accent bg-accent-soft' : 'border-line-strong hover:bg-surface-2'}`}>
-              <input type="radio" className="sr-only" checked={mode === m} onChange={() => setMode(m)} />
-              <span className="text-sm font-medium">{t}</span>
-              <span className="block text-xs text-fg-2">{b}</span>
-            </label>
-          ))}
-        </div>
-
-        {mode === 'n-pass' && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Max rounds">
-              {(id) => <input id={id} type="number" min={2} max={10} className={inputCls} value={maxRounds} onChange={(e) => setMaxRounds(Math.max(2, Math.min(10, +e.target.value || 2)))} />}
-            </Field>
-            <fieldset>
-              <legend className="mb-1.5 text-[13px] font-medium">When to stop</legend>
-              <div className="flex flex-col gap-1.5 text-sm">
-                <label className="flex items-center gap-2">
-                  <input type="radio" className="accent-[var(--accent)]" checked={earlyStop} onChange={() => setEarlyStop(true)} /> May stop early
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="radio" className="accent-[var(--accent)]" checked={!earlyStop} onChange={() => setEarlyStop(false)} /> Always use all rounds
-                </label>
-              </div>
-            </fieldset>
-          </div>
-        )}
-
-        <Field label="Optimizer model" help="Default comes from settings. Recorded with the result.">
-          {(id) => <ModelSelect id={id} value={model} onChange={setModel} />}
-        </Field>
-        <Field label="Instructions (optional)" help='Constraints for the rewrite, e.g. "keep it under 200 words".'>
-          {(id) => <textarea id={id} rows={2} className={textareaCls} value={instructions} onChange={(e) => setInstructions(e.target.value)} />}
-        </Field>
-
-        <div className="rounded-md bg-surface-2 px-4 py-3 text-[13px] leading-relaxed text-fg-2">
-          <p className="mb-1.5 font-medium text-fg">What the optimizer sees</p>
-          <ul className="flex flex-col gap-1">
-            <li className="flex items-center gap-2">
-              <LabelTag label="train" /> {count('train')} inputs, in full
-            </li>
-            <li className="flex items-center gap-2">
-              <LabelTag label="validation" /> {count('validation')} inputs, number scores only
-            </li>
-            <li className="flex items-center gap-2">
-              <LabelTag label="test" /> {count('test')} inputs, never. Run them later on a round you pick.
-            </li>
-          </ul>
-          {count('train') === 0 && <p className="mt-2 text-danger">Add at least one train input to optimize.</p>}
-          {count('validation') === 0 && count('train') > 0 && <p className="mt-2 text-warn">No validation inputs: you won't be able to tell real gains from overfitting.</p>}
-        </div>
-      </div>
-    </Modal>
   )
 }

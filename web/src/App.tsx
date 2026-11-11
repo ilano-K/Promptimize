@@ -4,7 +4,6 @@ import { Compare } from './pages/Compare'
 import { Experiment } from './pages/Experiment'
 import { Experiments } from './pages/Experiments'
 import { Library } from './pages/Library'
-import { Loop } from './pages/Loop'
 import { Projects } from './pages/Projects'
 import { Settings } from './pages/Settings'
 import { useRoute } from './router'
@@ -33,8 +32,6 @@ export default function App() {
     page = <Compare a={query.get('a') ?? undefined} b={query.get('b') ?? undefined} />
   } else if (section === 'settings') {
     page = <Settings />
-  } else if (parts[1] && parts[2] === 'loops' && parts[3]) {
-    page = <Loop experimentId={parts[1]} loopId={parts[3]} roundParam={query.get('round') ?? undefined} />
   } else if (parts[1]) {
     page = <Experiment id={parts[1]} runParam={query.get('run') ?? undefined} />
   } else {

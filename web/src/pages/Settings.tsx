@@ -2,7 +2,7 @@ import { ArrowsClockwise, CheckCircle, Eye, EyeSlash, Key, PencilSimple, Plug, P
 import type { CreateProviderBody, UpdateProviderBody } from '@promptimize/shared'
 import { useEffect, useState } from 'react'
 import { usageApi } from '../api'
-import { Button, Empty, Field, inputCls, Modal, ModelSelect, PageHeader, Panel, Tag } from '../components/ui'
+import { Button, Empty, Field, inputCls, Modal, PageHeader, Panel, Tag } from '../components/ui'
 import { errorMessage } from '../components/ui.helpers'
 import { usageFromApi } from '../mappers'
 import { fetchModels, kindInfo, PROVIDER_KINDS, slug, testConnection } from '../providers'
@@ -10,10 +10,8 @@ import { useStoreShallow } from '../store'
 import type { Provider, ProviderKind, Usage } from '../types'
 
 export function Settings() {
-  const { settings, updateSettings, resetDemo } = useStoreShallow((st) => ({
+  const { settings } = useStoreShallow((st) => ({
     settings: st.settings,
-    updateSettings: st.updateSettings,
-    resetDemo: st.resetDemo,
   }))
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Provider | null>(null)
@@ -78,31 +76,8 @@ export function Settings() {
             </p>
           )}
           <p className="mt-3 text-xs text-fg-3">
-            Keys are kept by the local server in <code className="font-mono">~/.promptimize/config.json</code>, outside any repo. The browser never stores them.
+            Keys are kept by the local server in its per-user config folder, outside any repo. The browser never stores them.
           </p>
-        </section>
-
-        <section>
-          <h2 className="mb-1 text-[15px] font-semibold">Optimizer</h2>
-          <p className="mb-4 text-sm text-fg-2">Used by default when you click optimize. You can change it per loop.</p>
-          <div className="max-w-sm">
-            <Field label="Default optimizer model">
-              {(id) => <ModelSelect id={id} value={settings.defaultOptimizerModel} onChange={(m) => updateSettings({ defaultOptimizerModel: m })} />}
-            </Field>
-          </div>
-        </section>
-
-        <section className="border-t border-line pt-6">
-          <h2 className="mb-1 text-[15px] font-semibold">Local runs</h2>
-          <p className="mb-4 text-sm text-fg-2">
-            Runs and optimize loops are simulated in this browser. Projects, the library and experiments are saved on the server.
-          </p>
-          <Button
-            variant="danger"
-            onClick={() => confirm('Clear all runs and optimize loops from this browser? Projects and library objects stay.') && resetDemo()}
-          >
-            Clear local runs
-          </Button>
         </section>
       </div>
 
@@ -159,7 +134,7 @@ function ProviderCard({
   onEdit: () => void
   onKey: () => void
 }) {
-  const { s, patch, remove } = useProviders()
+  const { patch, remove } = useProviders()
   const info = kindInfo(p.kind)
   const [draft, setDraft] = useState('')
   const [adding, setAdding] = useState(false)
@@ -180,7 +155,7 @@ function ProviderCard({
   const usageText = (modelId: string) => {
     const u = usage?.models[modelId]
     const n = (u?.prompts.length ?? 0) + (u?.judges.length ?? 0)
-    return [n ? `${n} prompt${n === 1 ? '' : 's'}/judge${n === 1 ? '' : 's'}` : '', usage && s.settings.defaultOptimizerModel === modelId ? 'default optimizer' : '']
+    return [n ? `${n} prompt${n === 1 ? '' : 's'}/judge${n === 1 ? '' : 's'}` : '']
       .filter(Boolean)
       .join(', ')
   }

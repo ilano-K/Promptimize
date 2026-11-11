@@ -1,6 +1,5 @@
 // Adapters between the server's API shapes (numeric ids, JSON objects) and the
-// screen shapes in types.ts (string ids, JSON text). Runs and loops are still
-// simulated locally, so they keep using the screen types.
+// screen shapes in types.ts (string ids, JSON text).
 
 import type {
   CompareTag,
@@ -153,8 +152,7 @@ export function experimentToUpdate(x: Experiment): UpdateExperimentBody {
 }
 
 // ---- Runs ----
-// Runs live on the server. The screen keeps its string ids and text schema so
-// the simulated optimize loops can share the same shapes.
+// Runs live on the server. The screen keeps its string ids and text schema.
 
 function snapshotFromApi(x: ApiSnapshot): Snapshot {
   const providers: NonNullable<Snapshot['providers']> = {}
@@ -201,9 +199,6 @@ export function runFromApi(x: ApiRun | ApiRunDetail): Run {
     status: x.status,
     error: x.error ?? undefined,
     startedAt: Date.parse(x.startedAt),
-    loopId: x.loopId === null ? undefined : id(x.loopId),
-    round: x.round ?? undefined,
-    kind: 'run',
   }
 }
 

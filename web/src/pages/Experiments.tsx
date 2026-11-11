@@ -16,7 +16,6 @@ export function Experiments() {
     prompts: st.prompts,
     judges: st.judges,
     runs: st.runs,
-    loops: st.loops,
   }))
   const [creating, setCreating] = useState(false)
   const list = s.experiments.filter((e) => e.projectId === s.projectId).sort((a, b) => b.createdAt - a.createdAt)
@@ -51,7 +50,6 @@ export function Experiments() {
             const judge = s.judges.find((j) => j.id === e.judgeId)
             const run = latestRun(s.runs, e.id)
             const avg = run ? averages(run) : {}
-            const loops = s.loops.filter((l) => l.experimentId === e.id).length
             return (
               <li key={e.id} className="rise" style={{ animationDelay: `${i * 30}ms` }}>
                 <a
@@ -68,7 +66,6 @@ export function Experiments() {
                     {!prompt && <Tag tone="warn">Missing prompt</Tag>}
                     {judge ? <span>{judge.name}</span> : <span className="text-fg-3">no judge</span>}
                     <span className="text-fg-3">with {e.inputIds.length} inputs</span>
-                    {loops > 0 && <Tag tone="accent">{loops} optimize loop{loops > 1 ? 's' : ''}</Tag>}
                   </div>
                   <div className="flex items-center gap-4 md:justify-end">
                     {Object.entries(avg)
