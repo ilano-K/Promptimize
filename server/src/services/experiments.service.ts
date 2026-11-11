@@ -119,7 +119,7 @@ export function listExperiments(projectId: number): Experiment[] {
     .orderBy(desc(experiments.id))
     .all();
 
-  // MISSING: used by (update this when Runs and Optimize Loops are done)
+  // MISSING: used by (fill in when the experiment screen shows run counts)
   const inputIds = getInputIdsFor(rows.map((r) => r.id));
   return rows.map((r) => dbToDomain(r, { inputIds: inputIds.get(r.id) ?? [] }));
 }
@@ -179,7 +179,7 @@ export function readExperiment(id: number): Experiment {
   if (!experiment) {
     throw new NotFoundError("experiment", id);
   }
-  // MISSING: used by (update when Runs and Optimize Loops are done)
+  // MISSING: used by (fill in when the experiment screen shows run counts)
   const inputIds = getInputIdsMap(experiment.id);
   return dbToDomain(experiment, {
     inputIds: inputIds.get(experiment.id) ?? [],
@@ -256,7 +256,6 @@ export function deleteExperiment(id: number) {
 type ExperimentRow = typeof experiments.$inferSelect;
 const EMPTY_USED_BY: ExperimentUsedBy = {
   runs: [],
-  optimizeLoops: [],
 };
 
 function dbToDomain(

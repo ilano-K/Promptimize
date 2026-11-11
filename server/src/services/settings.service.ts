@@ -5,12 +5,10 @@ import type {
   SafeProvider,
   Settings,
   UpdateProviderBody,
-  UpdateSettingsBody,
 } from "@promptimize/shared";
 import { getConfig, saveConfig } from "../config";
 import { modelsUrls, providerAdapters } from "../llm/provider";
 import { DuplicateNameError, NotFoundError } from "../errors/domain";
-import { assertModelConfigured } from "../llm/models";
 
 // READ settings
 export function readSettings(): Settings {
@@ -22,7 +20,6 @@ export function readSettings(): Settings {
   );
 
   return {
-    defaultOptimizerModel: config.defaultOptimizerModel,
     providers: safeProviders,
   };
 }
@@ -100,19 +97,6 @@ export function deleteProvider(id: string) {
 
   config.providers = config.providers.filter((p) => p.id !== id);
   saveConfig(config);
-}
-
-// UPDATE default optimizer model
-export function updateDefaultOptimizerModel(data: UpdateSettingsBody) {
-  const config = getConfig();
-
-  if (data.defaultOptimizerModel) {
-    assertModelConfigured(data.defaultOptimizerModel);
-    config.defaultOptimizerModel = data.defaultOptimizerModel;
-  }
-
-  saveConfig(config);
-  return { defaultOptimizerModel: config.defaultOptimizerModel };
 }
 
 // ====== NETWORK ======

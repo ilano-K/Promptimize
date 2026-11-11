@@ -57,6 +57,13 @@
       "when": 1793879187070,
       "tag": "0007_nebulous_radioactive_man",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794391172524,
+      "tag": "0008_familiar_madrox",
+      "breakpoints": true
     }
   ]
 }

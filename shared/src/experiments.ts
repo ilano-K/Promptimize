@@ -6,15 +6,8 @@ const run = z.object({
   startedAt: z.string(),
 });
 
-const optimizeLoop = z.object({
-  id: z.string(),
-  status: z.string(),
-  rounds: z.number(),
-});
-
 const experimentUsedBy = z.object({
   runs: z.array(run),
-  optimizeLoops: z.array(optimizeLoop),
 });
 
 export const experiment = z.object({

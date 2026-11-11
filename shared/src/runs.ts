@@ -59,9 +59,6 @@ export const run = z.object({
   snapshot: snapshotV1,
   status: z.enum(runStatuses),
   startedAt: z.string(),
-  loopId: z.number().nullable(),
-  round: z.number().nullable(),
-  note: z.string().nullable(),
   error: z.string().nullable(),
 });
 

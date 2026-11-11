@@ -3,7 +3,6 @@ import {
   createProviderBody,
   providerConnectionBody,
   updateProviderBody,
-  updateSettingsBody,
 } from "@promptimize/shared";
 import { validateJson } from "../lib/validate";
 import {
@@ -12,7 +11,6 @@ import {
   fetchProviderModels,
   readSettings,
   testProviderConnection,
-  updateDefaultOptimizerModel,
   updateProvider,
 } from "../services/settings.service";
 
@@ -44,13 +42,6 @@ settingsRoutes.delete("/:id", (c) => {
   const id = c.req.param("id");
   deleteProvider(id);
   return c.body(null, 204);
-});
-
-// Update default optimizer
-settingsRoutes.patch("/", validateJson(updateSettingsBody), (c) => {
-  const data = c.req.valid("json");
-  const defaultOptimizerModel = updateDefaultOptimizerModel(data);
-  return c.json(defaultOptimizerModel, 200);
 });
 
 // Test connection by passing model kind and api key with optional base url

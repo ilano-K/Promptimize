@@ -42,14 +42,6 @@ export const providerSchema = providerShape.extend({
   id: z.string(),
 });
 
-export const updateSettingsBody = z
-  .object({
-    defaultOptimizerModel: z.string().trim().min(1).max(100).optional(),
-  })
-  .refine((body) => Object.keys(body).length > 0, {
-    message: "nothing to update",
-  });
-
 export const providerConnectionBody = z
   .object({
     kind: z.enum(providerKinds),
@@ -60,7 +52,6 @@ export const providerConnectionBody = z
 
 export type CreateProviderBody = z.infer<typeof createProviderBody>;
 export type UpdateProviderBody = z.infer<typeof updateProviderBody>;
-export type UpdateSettingsBody = z.infer<typeof updateSettingsBody>;
 export type Provider = z.infer<typeof providerSchema>;
 export type SafeProvider = Omit<Provider, "apiKey"> & {
   hasKey: boolean;
@@ -70,7 +61,6 @@ export type ProviderConnectionBody = z.infer<typeof providerConnectionBody>;
 export type ProviderKind = (typeof providerKinds)[number];
 
 export type Settings = {
-  defaultOptimizerModel: string;
   providers: SafeProvider[];
 };
 

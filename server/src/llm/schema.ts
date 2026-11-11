@@ -13,7 +13,7 @@ const ajv = new Ajv2020({ allErrors: true, strictTuples: false });
 const cleanErrors = (text: string) => [...new Set(text.split(", "))].join(", ");
 
 // Compiled validators, keyed by schema text. The same schema is reused across
-// inputs and optimize rounds, so it is compiled once per distinct schema.
+// inputs and runs, so it is compiled once per distinct schema.
 const validators = new Map<string, ValidateFunction>();
 
 export function getValidator(schema: JsonSchema): ValidateFunction {
