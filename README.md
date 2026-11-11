@@ -57,6 +57,12 @@ Structured output depends on the model following a JSON schema. A small or heavi
 
 Each input goes through the prompt, then the judge. Results are written as they finish, so stopping or crashing loses at most the calls in flight. A run freezes a snapshot of the prompt, inputs, judge, and provider endpoints; editing the library afterward never changes an old run, which is what makes comparison meaningful.
 
+## Optimizing the prompt
+
+There is no built-in optimizer. The app stops at run, read, edit, compare, and the optimize loop from earlier plans is deprecated.
+
+MCP support is planned instead. Once the app exposes its library, runs, and results over MCP, an agent can run the loop itself: read the outputs and scores, rewrite the prompt, start the next run, compare the two. The agent brings the judgement about what to change; Promptimize keeps the history, the snapshots, and the scoring.
+
 ## Repo layout
 
 ```
