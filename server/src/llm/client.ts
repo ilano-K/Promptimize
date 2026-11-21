@@ -10,6 +10,23 @@ import { assertModelConfigured } from "./models";
 import { MissingBaseUrlError, ModelNotConfiguredError } from "../errors/domain";
 import { parseModelId } from "../lib/llm";
 
+// generateText is non-streaming, but some OpenAI-compatible gateways stream
+// by default when the request omits `stream`. Make it explicit for that kind.
+const nonStreamingFetch: typeof fetch = async (input, init) => {
+  if (typeof init?.body === "string") {
+    try {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      if (!("stream" in body)) {
+        body.stream = false;
+        init = { ...init, body: JSON.stringify(body) };
+      }
+    } catch {
+      // Not a JSON body; leave it untouched.
+    }
+  }
+  return fetch(input, init);
+};
+
 // Configure base url based on the providerId (Map)
 const DEFAULT_BASE: Record<ProviderKind, string> = {
   anthropic: "https://api.anthropic.com",
@@ -47,9 +64,15 @@ export function resolveModel(modelId: string): LanguageModel {
         apiKey: provider.apiKey,
         baseURL: `${base}/v1beta`,
       })(modelName);
+    case "openai-compatible":
+      return createOpenAICompatible({
+        name: provider.kind,
+        apiKey: provider.apiKey ?? "ollama",
+        baseURL: base.endsWith("/v1") ? base : `${base}/v1`,
+        fetch: nonStreamingFetch,
+      })(modelName);
     case "openrouter":
     case "ollama":
-    case "openai-compatible":
       return createOpenAICompatible({
         name: provider.kind,
         apiKey: provider.apiKey ?? "ollama",
