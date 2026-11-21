@@ -12,4 +12,5 @@ export * from "./runs.js";
 export * from "./result.js";
 export * from "./compare.js";
 export * from "./usage.js";
+export * from "./logs.js";
 export type Health = { ok: true };
