@@ -1,4 +1,4 @@
-import { Books, Columns, Desktop, Flask, GearSix, Moon, SquaresFour, Sun, type Icon } from '@phosphor-icons/react'
+import { Books, Columns, Desktop, Flask, GearSix, List, Moon, SquaresFour, Sun, type Icon } from '@phosphor-icons/react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useStore } from '../store'
 
@@ -103,6 +103,7 @@ export function Shell({ section, children }: { section: string; children: ReactN
               {nav.map(({ key, label, icon }) => link(key, label, icon))}
             </>
           )}
+          {link('logs', 'Logs', List)}
           <span className="md:hidden">{link('settings', 'Settings', GearSix)}</span>
         </nav>
 

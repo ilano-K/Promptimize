@@ -6,6 +6,7 @@ import {
   experiment as experimentSchema,
   input as inputSchema,
   inputRead as inputReadSchema,
+  logFile as logFileSchema,
   judge as judgeSchema,
   judgeRead as judgeReadSchema,
   project,
@@ -29,6 +30,7 @@ import type {
   Input,
   InputRead,
   Judge,
+  LogFile,
   JudgeRead,
   Project,
   Prompt,
@@ -172,6 +174,11 @@ export const compareApi = {
 export const usageApi = {
   /** Which prompts and judges use each configured model. */
   get: async (): Promise<Usage> => usageSchema.parse(await request('GET', '/v1/usage')),
+}
+
+export const logsApi = {
+  /** The server's append-only log file, capped at the last 2000 lines. */
+  get: async (): Promise<LogFile> => logFileSchema.parse(await request('GET', '/v1/logs')),
 }
 
 export const settingsApi = {

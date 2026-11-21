@@ -4,6 +4,7 @@ import { Compare } from './pages/Compare'
 import { Experiment } from './pages/Experiment'
 import { Experiments } from './pages/Experiments'
 import { Library } from './pages/Library'
+import { Logs } from './pages/Logs'
 import { Projects } from './pages/Projects'
 import { Settings } from './pages/Settings'
 import { useRoute } from './router'
@@ -20,7 +21,7 @@ export default function App() {
   }, [loadProjects, loadSettings])
   let section = parts[0] ?? 'projects'
   // Project pages need an open project; without one, show the project list.
-  if (!hasProject && section !== 'settings') section = 'projects'
+  if (!hasProject && section !== 'settings' && section !== 'logs') section = 'projects'
 
   let page
   if (section === 'projects') {
@@ -32,6 +33,8 @@ export default function App() {
     page = <Compare a={query.get('a') ?? undefined} b={query.get('b') ?? undefined} />
   } else if (section === 'settings') {
     page = <Settings />
+  } else if (section === 'logs') {
+    page = <Logs />
   } else if (parts[1]) {
     page = <Experiment id={parts[1]} runParam={query.get('run') ?? undefined} />
   } else {
