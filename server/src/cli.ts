@@ -6,6 +6,7 @@ import { runMigrations } from "./db/index.js";
 import { loadConfig } from "./config/index.js";
 import { interruptLeftoverRuns } from "./services/runs.service.js";
 import { serveFrontend } from "./lib/static.js";
+import { log } from "./lib/log.js";
 
 const { values } = parseArgs({
   options: {
@@ -37,6 +38,7 @@ const url = `http://127.0.0.1:${port}`;
 
 const server = serve({ fetch: app.fetch, port, hostname: "127.0.0.1" }, () => {
   console.log(`Promptimize running at ${url}`);
+  log("INFO", "server.start", { port, host: "127.0.0.1" });
   // Opening the browser is a convenience: a headless machine still gets a
   // working server, so a failure here is not an error.
   if (!values["no-open"]) void open(url).catch(() => {});

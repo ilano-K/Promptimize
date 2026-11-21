@@ -11,6 +11,7 @@ import { readPrompt } from "./prompts.service";
 import { NotFoundError, ValidationError } from "../errors/domain";
 import { readJudge } from "./judges.service";
 import { buildSnapshot } from "../lib/snapshot";
+import { log } from "../lib/log";
 import { readInput } from "./inputs.service";
 import { getConfig } from "../config";
 import { db } from "../db";
@@ -136,6 +137,7 @@ async function executeJudging(runId: number, resultsToRetry: Result[]) {
 
   // SAVE judge outputs
   saveJudgeOutcomes(
+    runId,
     outcomes,
     resultsToRetry.map((r) => ({ resultId: r.id, output: r.output })),
   );
@@ -198,11 +200,13 @@ export function stopRun(runId: number): boolean {
   if (!requestStop(runId)) {
     // The run isn't owned by any job; stale
     setStatus(runId, "cancelled");
+    log("INFO", "run.cancelled", { runId, reason: "stale" });
     return true;
   }
 
   // SET status to stop and RETURN
   setStatus(runId, "stopping");
+  log("INFO", "run.stopped", { runId });
   return true;
 }
 
@@ -217,11 +221,13 @@ export async function executeRun(runId: number): Promise<void> {
   // CHECK if the run is REQUESTED FOR STOPPING
   if (isStopRequested(runId)) {
     setStatus(runId, "cancelled");
+    log("INFO", "run.cancelled", { runId, reason: "before_start" });
     return;
   }
 
   // SET status to `running`
   setStatus(runId, "running");
+  log("INFO", "run.started", { runId, experimentId: run.experimentId });
 
   const snapshot = run.snapshot;
   const promptObject = snapshot.prompt;
@@ -250,6 +256,7 @@ export async function executeRun(runId: number): Promise<void> {
   // A cancelled run is not half-evaluated: skip judging entirely.
   if (isStopRequested(runId)) {
     setStatus(runId, "cancelled");
+    log("INFO", "run.cancelled", { runId, reason: "before_judging" });
     return;
   }
 
@@ -261,17 +268,23 @@ export async function executeRun(runId: number): Promise<void> {
       pendingOutputs.map((p) => p.output),
     );
     // SAVE judge outputs
-    saveJudgeOutcomes(outcomes, pendingOutputs);
+    saveJudgeOutcomes(runId, outcomes, pendingOutputs);
   }
 
   // SET status to: `cancelled` if the run is requested for stopping mid-run, else `done`
-  setStatus(runId, isStopRequested(runId) ? "cancelled" : "done");
+  const finalStatus = isStopRequested(runId) ? "cancelled" : "done";
+  setStatus(runId, finalStatus);
+  log("INFO", finalStatus === "done" ? "run.done" : "run.cancelled", {
+    runId,
+    results: pendingOutputs.length,
+  });
 }
 
 // ===========================
 // === SAVE JUDGE OUTCOMES ===
 // ===========================
 function saveJudgeOutcomes(
+  runId: number,
   outcomes: JudgeOutcome[],
   outputs: { resultId: number; output: string }[],
 ) {
@@ -298,6 +311,7 @@ function saveJudgeOutcomes(
         })
         .where(eq(results.id, resultId))
         .run();
+      log("WARN", "judge.error", { runId, resultId, error: outcome.error });
     }
   }
 }
@@ -324,6 +338,7 @@ export function markRunFailed(runId: number, error: unknown): void {
   // logs run error, and UPDATE run `status` to failed and `message` to error message
   const message = failureMessage(error);
   console.error(`run ${runId} failed: ${message}`);
+  log("ERROR", "run.failed", { runId, error: message });
   db.update(runs)
     .set({ status: "failed", error: message })
     .where(eq(runs.id, runId))
@@ -334,6 +349,10 @@ function markRetryFailed(runId: number, error: unknown): void {
   // only judging was retried, so logs retry error and LEAVE run `status` at
   // done: outputs are complete and failed would hide the retry button
   console.error(`run ${runId}: retry judging failed: ${failureMessage(error)}`);
+  log("ERROR", "run.retry_failed", {
+    runId,
+    error: failureMessage(error),
+  });
   setStatus(runId, "done");
 }
 

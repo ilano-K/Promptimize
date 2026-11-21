@@ -4,6 +4,7 @@ import { getValidator, formatErrors, assertValidSchema } from "./schema";
 import type { JsonSchema } from "@promptimize/shared";
 import { InvalidOutput } from "../errors/domain";
 import { extractJson, preview, schemaInstruction } from "../lib/llm";
+import { log } from "../lib/log";
 
 interface GenerationOptions {
   temperature?: number;
@@ -44,6 +45,7 @@ export async function runPrompt(
 
   const parsed = extractJson(result.text);
   if (parsed === undefined) {
+    log("ERROR", "ai.invalid_json", { model: modelId, raw: preview(result.text) });
     throw new InvalidOutput(
       modelId,
       `response was not JSON: ${preview(result.text)}`,
@@ -51,6 +53,11 @@ export async function runPrompt(
   }
 
   if (!validate(parsed)) {
+    log("ERROR", "ai.invalid_schema", {
+      model: modelId,
+      errors: formatErrors(validate),
+      raw: preview(result.text),
+    });
     throw new InvalidOutput(modelId, formatErrors(validate));
   }
 

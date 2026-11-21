@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import type { ApiErrorBody, DomainErrorCode } from "@promptimize/shared";
 import { DomainError } from "./domain";
 import { ApiError } from "./api";
+import { log } from "../lib/log";
 
 // map domain error codes to http status codes (layers throw their own error codes)
 const statusByCode: Record<DomainErrorCode, ContentfulStatusCode> = {
@@ -41,6 +42,11 @@ export const errorHandler: ErrorHandler = (err, c) => {
   }
 
   console.error(`${c.req.method} ${c.req.path}`, err);
+  log("ERROR", "request.error", {
+    method: c.req.method,
+    path: c.req.path,
+    error: err instanceof Error ? err.message : String(err),
+  });
 
   // default
   const body: ApiErrorBody = {
