@@ -3,8 +3,8 @@ import { resolveModel } from "./client";
 import { getValidator, formatErrors, assertValidSchema } from "./schema";
 import type { JsonSchema } from "@promptimize/shared";
 import { InvalidOutput } from "../errors/domain";
-import { extractJson, preview, schemaInstruction } from "../lib/llm";
-import { log } from "../lib/log";
+import { extractJson, preview, rawPreview, schemaInstruction } from "../lib/llm";
+import { errorDetails, log } from "../lib/log";
 
 interface GenerationOptions {
   temperature?: number;
@@ -24,28 +24,39 @@ export async function runPrompt(
 
   // free-form path (no output schema)
   if (!outputSchema) {
-    const result = await generateText({
-      model,
-      prompt: text,
-      temperature: 0,
-      ...options,
-    });
-    return { text: result.text };
+    try {
+      const result = await generateText({
+        model,
+        prompt: text,
+        temperature: 0,
+        ...options,
+      });
+      return { text: result.text };
+    } catch (error) {
+      log("ERROR", "ai.call_failed", { model: modelId, ...errorDetails(error) });
+      throw error;
+    }
   }
 
   // structured path: ask for JSON, then enforce the schema ourselves
   assertValidSchema(outputSchema); // a schema saved before save-time validation existed
   const validate = getValidator(outputSchema);
-  const result = await generateText({
-    model,
-    prompt: text + schemaInstruction(outputSchema),
-    temperature: 0,
-    ...options,
-  });
+  let result;
+  try {
+    result = await generateText({
+      model,
+      prompt: text + schemaInstruction(outputSchema),
+      temperature: 0,
+      ...options,
+    });
+  } catch (error) {
+    log("ERROR", "ai.call_failed", { model: modelId, ...errorDetails(error) });
+    throw error;
+  }
 
   const parsed = extractJson(result.text);
   if (parsed === undefined) {
-    log("ERROR", "ai.invalid_json", { model: modelId, raw: preview(result.text) });
+    log("ERROR", "ai.invalid_json", { model: modelId, raw: rawPreview(result.text) });
     throw new InvalidOutput(
       modelId,
       `response was not JSON: ${preview(result.text)}`,
@@ -56,7 +67,7 @@ export async function runPrompt(
     log("ERROR", "ai.invalid_schema", {
       model: modelId,
       errors: formatErrors(validate),
-      raw: preview(result.text),
+      raw: rawPreview(result.text),
     });
     throw new InvalidOutput(modelId, formatErrors(validate));
   }

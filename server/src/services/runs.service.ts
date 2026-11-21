@@ -11,7 +11,7 @@ import { readPrompt } from "./prompts.service";
 import { NotFoundError, ValidationError } from "../errors/domain";
 import { readJudge } from "./judges.service";
 import { buildSnapshot } from "../lib/snapshot";
-import { log } from "../lib/log";
+import { errorDetails, log } from "../lib/log";
 import { readInput } from "./inputs.service";
 import { getConfig } from "../config";
 import { db } from "../db";
@@ -338,7 +338,7 @@ export function markRunFailed(runId: number, error: unknown): void {
   // logs run error, and UPDATE run `status` to failed and `message` to error message
   const message = failureMessage(error);
   console.error(`run ${runId} failed: ${message}`);
-  log("ERROR", "run.failed", { runId, error: message });
+  log("ERROR", "run.failed", { runId, error: message, ...errorDetails(error) });
   db.update(runs)
     .set({ status: "failed", error: message })
     .where(eq(runs.id, runId))
@@ -352,6 +352,7 @@ function markRetryFailed(runId: number, error: unknown): void {
   log("ERROR", "run.retry_failed", {
     runId,
     error: failureMessage(error),
+    ...errorDetails(error),
   });
   setStatus(runId, "done");
 }

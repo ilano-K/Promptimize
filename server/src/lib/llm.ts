@@ -43,6 +43,10 @@ export function extractJson(text: string): unknown {
 export const preview = (text: string) =>
   JSON.stringify(text.length > 120 ? `${text.slice(0, 120)}...` : text);
 
+// For logs: truncate without JSON.stringify so log() escapes the text once.
+export const rawPreview = (text: string) =>
+  text.length > 120 ? `${text.slice(0, 120)}...` : text;
+
 // Not every provider is compatible with a response_format, so the schema is described in
 // the prompt as well
 export function schemaInstruction(schema: JsonSchema): string {
